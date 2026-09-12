@@ -1,0 +1,20 @@
+allowBuilds:
+  # false a propósito: el binario nativo de esbuild llega por la dependencia
+  # opcional de plataforma (@esbuild/darwin-arm64), no por el postinstall.
+  # Comprobado que Convex y Vitest empaquetan sin él.
+  esbuild: false
+  sharp: false
+  unrs-resolver: false
+
+# Overrides puestos para satisfacer la política de confianza de pnpm
+# (trustPolicy: no-downgrade). No son bypasses: en ambos casos subimos a una
+# versión que SÍ tiene provenance attestation, en vez de excluir el chequeo.
+#   - eslint-import-resolver-typescript 3.10.1 (dep de eslint-config-next) no
+#     tiene attestation; 4.4.5 sí.
+#   - semver 6.3.1 (dep transitiva de eslint-plugin-react) tampoco; 7.x sí.
+#   - reselect 5.1.1 (dep de recharts, que usa el componente Chart de shadcn)
+#     es de 2024 y tampoco; 5.2.0 en adelante sí.
+overrides:
+  eslint-import-resolver-typescript: ^4.4.5
+  semver: ^7.7.2
+  reselect: ^5.2.0
