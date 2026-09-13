@@ -2,7 +2,7 @@ import type { CatalogSource, ParsedCatalogEntry } from "./types";
 import { slugify } from "../matching/normalize";
 
 /**
- * models.dev — base comunitaria de modelos, MIT, actualizada a diario.
+ * models.dev: base comunitaria de modelos, MIT, actualizada a diario.
  * Es nuestro catálogo canónico: precios, contexto, modalidades y fechas.
  *
  * El archivo trae 213 proveedores y ~7700 filas porque el mismo modelo aparece

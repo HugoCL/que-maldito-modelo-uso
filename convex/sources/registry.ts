@@ -4,8 +4,6 @@ import { openRouter, openRouterProgramming } from "./openRouter";
 import { cursorBench } from "./cursorBench";
 import { deepSwe } from "./deepSwe";
 import { terminalBench } from "./terminalBench";
-import { sweRebench } from "./sweRebench";
-import { sweBenchVerified } from "./sweBenchVerified";
 import { artificialAnalysis } from "./artificialAnalysis";
 
 /**
@@ -24,8 +22,6 @@ export const SOURCES: Source[] = [
   deepSwe,
   cursorBench,
   terminalBench,
-  sweRebench,
-  sweBenchVerified,
   artificialAnalysis,
 ];
 

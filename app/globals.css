@@ -23,6 +23,7 @@
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
+  --color-ok: var(--ok);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -62,6 +63,9 @@
   --accent: oklch(0.967 0.001 286.375);
   --accent-foreground: oklch(0.21 0.006 285.885);
   --destructive: oklch(0.577 0.245 27.325);
+  /* Verde de "esta fuente respondió". Solo lo usa /estado, y solo ahí hace
+     falta un color que no sea ni el azul de la marca ni el rojo de un fallo. */
+  --ok: oklch(0.45 0.1 150);
   --border: oklch(0.92 0.004 286.32);
   --input: oklch(0.92 0.004 286.32);
   --ring: oklch(0.705 0.015 286.067);
@@ -99,6 +103,7 @@
   --accent: oklch(0.274 0.006 286.033);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
+  --ok: oklch(0.72 0.13 150);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.552 0.016 285.938);
@@ -126,5 +131,148 @@
   }
   html {
     @apply font-sans;
+  }
+}
+/**
+ * La palabrota que se tapa sola. Ver components/titulo-mutante.tsx.
+ *
+ * Un solo ciclo largo en bucle: la palabra se lee normal casi todo el rato y
+ * solo un tramo corto del ciclo la tiene tapada. El retraso por letra es lo que
+ * convierte siete cambios a la vez en una cascada.
+ */
+.palabra {
+  --ciclo: 9s;
+  --arranque: 1.4s;
+  --paso: 45ms;
+
+  position: relative;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.letra {
+  display: inline-block;
+  animation: letra-tapada var(--ciclo) ease-in-out calc(var(--arranque) + var(--i) * var(--paso))
+    infinite both;
+}
+
+/* Los simbolos, en su propia fila centrada encima de la palabra. */
+.palabrota {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9em;
+  pointer-events: none;
+}
+
+.simbolo {
+  display: block;
+  opacity: 0;
+  animation: simbolo-encima var(--ciclo) ease-in-out calc(var(--arranque) + var(--i) * var(--paso))
+    infinite both;
+}
+
+.simbolo::before {
+  content: attr(data-simbolo);
+}
+
+@keyframes letra-tapada {
+  0%,
+  3.5% {
+    opacity: 1;
+    transform: none;
+  }
+  5.5%,
+  13% {
+    opacity: 0;
+    transform: translateY(-0.06em) scale(0.9);
+  }
+  15%,
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes simbolo-encima {
+  0%,
+  4% {
+    opacity: 0;
+    transform: translateY(0.1em) scale(0.8);
+  }
+  6%,
+  12.5% {
+    opacity: 1;
+    transform: none;
+  }
+  14.5%,
+  100% {
+    opacity: 0;
+    transform: translateY(0.1em) scale(0.8);
+  }
+}
+
+/* Quien no quiere movimiento lee el nombre y ya. */
+@media (prefers-reduced-motion: reduce) {
+  .letra,
+  .simbolo {
+    animation: none;
+  }
+  .palabrota {
+    display: none;
+  }
+}
+
+/**
+ * La explicación de cada filtro, al pasar por encima. Ver
+ * components/barra-de-filtros.tsx.
+ *
+ * Cuelga de su propia pastilla, que es lo que hace que se entienda de cuál
+ * habla.
+ *
+ * Escondida está en `display: none` y no solo transparente: una caja de 260px
+ * colgando de la pastilla del medio ensancha la página aunque no se vea.
+ *
+ * Y solo aparece donde hay puntero y sitio. En una pantalla táctil no hay hover
+ * que la enseñe, y por debajo de 560px una caja de este ancho colgando de la
+ * última pastilla se saldría de la ventana. Ahí queda la línea de debajo de la
+ * barra, que dice lo mismo del perfil que esté puesto.
+ */
+.opcion {
+  position: relative;
+  display: inline-flex;
+}
+
+.ayuda {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 10;
+  display: none;
+  width: max-content;
+  max-width: min(260px, calc(100vw - 2.5rem));
+  margin-top: 7px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--popover);
+  box-shadow: 0 10px 24px -14px rgb(0 0 0 / 0.4);
+  color: var(--popover-foreground);
+  font-size: 12px;
+  line-height: 1.45;
+  pointer-events: none;
+}
+
+.opcion:last-child .ayuda {
+  right: 0;
+  left: auto;
+}
+
+@media (hover: hover) and (min-width: 560px) {
+  .opcion:hover .ayuda,
+  .opcion:focus-within .ayuda {
+    display: block;
   }
 }

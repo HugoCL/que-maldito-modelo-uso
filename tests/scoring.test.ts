@@ -7,8 +7,6 @@ import { parse as modelsDev } from "../convex/sources/modelsDev";
 import { parse as cursorBench } from "../convex/sources/cursorBench";
 import { parse as deepSwe } from "../convex/sources/deepSwe";
 import { parse as terminalBench } from "../convex/sources/terminalBench";
-import { parse as sweRebench } from "../convex/sources/sweRebench";
-import { parse as sweBenchVerified } from "../convex/sources/sweBenchVerified";
 import { buildCandidates } from "../convex/scoring/candidates";
 import {
   blendedPrice,
@@ -34,8 +32,6 @@ const { candidates } = buildCandidates(catalog, [
   { sourceId: "deepswe", observations: deepSwe(read("deepswe.html")) },
   { sourceId: "cursorbench", observations: cursorBench(read("cursorbench.html")) },
   { sourceId: "terminalbench", observations: terminalBench(read("terminalbench.html")) },
-  { sourceId: "swerebench", observations: sweRebench(read("swerebench.html")) },
-  { sourceId: "swebench-verified", observations: sweBenchVerified(read("swebench.json")) },
 ]);
 
 // Fecha fija: si no, los tests de decaimiento cambian de resultado cada día.
@@ -81,17 +77,46 @@ test("el orden de las tarjetas respeta su propia definición", () => {
   assert.ok(dia.cost! <= bueno.cost!, "'día a día' no puede costar más que 'bueno'");
 });
 
-test("cada tarjeta trae una alternativa distinta del ganador", () => {
+test("las alternativas no repiten al ganador ni a las otras tarjetas", () => {
+  const ganadores = new Set(tarjetas.map((t) => t.ganador.variantKey));
   for (const t of tarjetas) {
-    if (!t.segundo) continue;
-    assert.notEqual(t.segundo.variantKey, t.ganador.variantKey, `alternativa repetida en ${t.tier}`);
+    const vistas = new Set<string>();
+    for (const a of t.alternativas) {
+      assert.ok(
+        !ganadores.has(a.variantKey),
+        `${t.tier}: ${a.variantKey} ya es el ganador de una tarjeta`,
+      );
+      assert.ok(!vistas.has(a.variantKey), `${t.tier}: ${a.variantKey} repetida`);
+      vistas.add(a.variantKey);
+    }
   }
+});
+
+// Si no puedes usar el recomendado, lo que necesitas es otra respuesta a la
+// MISMA pregunta. Una suplente de "barato" que cueste más que el ganador de
+// "día a día" no lo es.
+test("las tres respuestas nunca son el mismo modelo", () => {
+  const claves = tarjetas.map((t) => t.ganador.variantKey);
+  assert.equal(new Set(claves).size, claves.length, `tarjetas repetidas: ${claves.join(", ")}`);
 });
 
 test("las razones citan números reales, no plantillas vacías", () => {
   for (const t of tarjetas) {
     assert.match(t.razon, /\$\d/, `la razón de ${t.tier} no menciona ningún costo`);
     assert.ok(t.razon.length > 40);
+  }
+});
+
+// La fila de la portada enseña calidad y costo en su propia columna: si la
+// frase de al lado repitiera esos dos números, la columna sobraría.
+test("la razón corta cabe en una línea y no repite el costo del ganador", () => {
+  for (const t of tarjetas) {
+    assert.ok(t.razonCorta.length > 20, `la razón corta de ${t.tier} está vacía`);
+    assert.ok(t.razonCorta.length <= 80, `la razón corta de ${t.tier} no cabe en una línea`);
+    assert.ok(
+      !t.razonCorta.includes(`$${t.ganador.cost!.toFixed(2)}`),
+      `la razón corta de ${t.tier} repite el costo que ya está en su columna`,
+    );
   }
 });
 
@@ -206,17 +231,30 @@ test("cambiar de perfil cambia las respuestas", () => {
   const agentico = elegirTarjetas(scoreAll(candidates, "agentico", AHORA));
   const mantenimiento = elegirTarjetas(scoreAll(candidates, "mantenimiento", AHORA));
   for (const conjunto of [agentico, mantenimiento]) {
-    assert.equal(conjunto.length, 3);
-    assert.equal(new Set(conjunto.map((t) => t.ganador.variantKey)).size, 3);
+    // Un perfil puede quedarse en dos respuestas cuando no hay datos para tres,
+    // que es lo que pasa con el trabajo agéntico porque casi nadie lo mide. Una
+    // sola respuesta ya no es una recomendación, es una lista.
+    assert.ok(conjunto.length >= 2, "un perfil con menos de dos respuestas no sirve");
+    assert.equal(new Set(conjunto.map((t) => t.ganador.variantKey)).size, conjunto.length);
   }
+  assert.notDeepEqual(
+    agentico.map((t) => t.ganador.variantKey),
+    mantenimiento.map((t) => t.ganador.variantKey),
+  );
 });
 
 test("todos los perfiles siguen respetando el orden de las tarjetas", () => {
-  for (const perfil of ["general", "mantenimiento", "agentico", "greenfield"] as const) {
+  for (const perfil of ["general", "mantenimiento", "agentico"] as const) {
     const t = elegirTarjetas(scoreAll(candidates, perfil, AHORA));
-    const [barato, dia, bueno] = t.map((x) => x.ganador);
-    assert.ok(bueno.quality >= dia.quality, `${perfil}: bueno < día a día`);
-    assert.ok(barato.cost! <= dia.cost!, `${perfil}: barato cuesta más que día a día`);
+    const de = (tier: string) => t.find((x) => x.tier === tier)?.ganador;
+    const barato = de("barato");
+    const dia = de("dia_a_dia");
+    const bueno = de("bueno");
+
+    if (bueno && dia) assert.ok(bueno.quality >= dia.quality, `${perfil}: bueno < día a día`);
+    if (barato && dia) assert.ok(barato.cost! <= dia.cost!, `${perfil}: barato > día a día`);
+    if (dia && bueno) assert.ok(dia.cost! <= bueno.cost!, `${perfil}: día a día > bueno`);
+    if (barato && bueno) assert.ok(barato.cost! <= bueno.cost!, `${perfil}: barato > bueno`);
   }
 });
 

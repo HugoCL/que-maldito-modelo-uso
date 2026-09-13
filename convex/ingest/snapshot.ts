@@ -6,7 +6,16 @@ import { USER_AGENT } from "../sources/registry";
  * Descarga y hash. Solo se guarda una copia cuando el contenido cambia, así
  * que la tabla crece con los cambios reales y no con los días, y siempre se
  * puede volver a parsear sin molestar a la fuente.
+ *
+ * Las copias grandes no van en el documento sino en el almacén de ficheros. El
+ * catálogo de models.dev pesa más de cuatro megas y un valor de Convex no pasa
+ * de uno: sin esto, la fuente de la que salen todos los modelos es justo la que
+ * no se puede guardar, y el pipeline entero se queda sin catálogo contra el que
+ * resolver nombres.
  */
+
+/** Un documento de Convex no admite valores de más de 1 MiB. */
+export const MAX_EN_DOCUMENTO = 768 * 1024;
 
 /** SHA-256 en hexadecimal. Disponible en el runtime por defecto de Convex. */
 export async function hashOf(body: string): Promise<string> {
@@ -59,22 +68,29 @@ export const guardarSnapshot = internalMutation({
   args: {
     sourceId: v.string(),
     contentHash: v.string(),
-    body: v.string(),
+    body: v.optional(v.string()),
+    storageId: v.optional(v.id("_storage")),
+    byteLength: v.number(),
   },
-  handler: async (ctx, { sourceId, contentHash, body }) => {
+  handler: async (ctx, { sourceId, contentHash, body, storageId, byteLength }) => {
     const existente = await ctx.db
       .query("rawSnapshots")
       .withIndex("by_sourceId_hash", (q) =>
         q.eq("sourceId", sourceId).eq("contentHash", contentHash),
       )
       .first();
-    if (existente) return existente._id;
+    // El mismo contenido ya guardado: el fichero que se acaba de subir sobra.
+    if (existente) {
+      if (storageId) await ctx.storage.delete(storageId);
+      return existente._id;
+    }
 
     return await ctx.db.insert("rawSnapshots", {
       sourceId,
       contentHash,
       body,
-      byteLength: body.length,
+      storageId,
+      byteLength,
       fetchedAt: Date.now(),
     });
   },
@@ -123,6 +139,9 @@ export const podarSnapshots = internalMutation({
       .order("desc")
       .collect();
     for (const viejo of todos.slice(conservar)) {
+      // Primero el fichero: si se borra el documento antes, se queda huérfano
+      // ocupando sitio y sin nadie que sepa que existe.
+      if (viejo.storageId) await ctx.storage.delete(viejo.storageId);
       await ctx.db.delete(viejo._id);
     }
     return todos.length - Math.min(todos.length, conservar);

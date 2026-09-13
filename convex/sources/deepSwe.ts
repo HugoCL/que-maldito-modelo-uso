@@ -2,7 +2,7 @@ import type { BenchmarkSource, ParsedObservation } from "./types";
 import { normalizeEffort } from "../matching/normalize";
 
 /**
- * DeepSWE v1.1 (Datacurve) — 113 tareas largas en 91 repos, 5 lenguajes.
+ * DeepSWE v1.1 (Datacurve): 113 tareas largas en 91 repos, 5 lenguajes.
  *
  * La página es TanStack Start y serializa los resultados en el blob de
  * hidratación como literales de objeto JavaScript (claves sin comillas,
@@ -11,7 +11,7 @@ import { normalizeEffort } from "../matching/normalize";
  *
  * Es la fuente más rica que encontramos: intervalos de confianza sobre 4
  * corridas completas, costo real por tarea, y un único harness
- * (mini-swe-agent) para todos los modelos — o sea que compara modelos, no
+ * (mini-swe-agent) para todos los modelos, o sea que compara modelos, no
  * andamios.
  */
 
@@ -118,7 +118,7 @@ export const deepSwe: BenchmarkSource = {
   name: "DeepSWE v1.1",
   homepage: "https://deepswe.datacurve.ai/",
   url: "https://deepswe.datacurve.ai/",
-  attribution: "DeepSWE v1.1 — Datacurve",
+  attribution: "DeepSWE v1.1, de Datacurve",
   license:
     "Leaderboard público. robots.txt permite crawling general; bloquea solo crawlers de entrenamiento.",
   enabled: true,

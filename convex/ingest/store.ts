@@ -7,8 +7,8 @@ import type { Doc, Id } from "../_generated/dataModel";
 /**
  * Escritura del catálogo y de las observaciones.
  *
- * Todo pasa por aquí para que el orquestador —que es una acción y no puede
- * tocar la base— se limite a descargar y parsear.
+ * Todo pasa por aquí para que el orquestador, que es una acción y no puede
+ * tocar la base, se limite a descargar y parsear.
  */
 
 const catalogEntry = v.object({
@@ -157,10 +157,12 @@ export const reemplazarObservaciones = internalMutation({
       if (!model) continue;
 
       const variantId = await variantePara(ctx, model._id, o.modelKey, o.effort);
-      // modelKey ya cumplió: de aquí en adelante la observación cuelga de la
-      // variante, que es lo que identifica "modelo a este effort".
-      const { modelKey, ...resto } = o;
+      // modelKey y effort ya cumplieron: de aquí en adelante la observación
+      // cuelga de la variante, que es justo "ese modelo a ese effort". Guardar
+      // el effort otra vez en la fila sería una segunda copia que puede mentir.
+      const { modelKey, effort, ...resto } = o;
       void modelKey;
+      void effort;
       await ctx.db.insert("observations", {
         ...resto,
         sourceId,

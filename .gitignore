@@ -42,3 +42,7 @@ next-env.d.ts
 
 # El ejemplo sí se versiona: la regla `.env*` de arriba lo tapaba.
 !.env.example
+
+# Lo escribe `npx convex dev` y lo vuelve a escribir cada build: versionarlo
+# solo sirve para tener conflictos.
+convex/_generated/

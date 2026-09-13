@@ -3,14 +3,21 @@ import { query } from "../_generated/server";
 import { candidatosDesdeLaBase } from "../scoring/recompute";
 import { scoreAll, type Scored } from "../scoring/compute";
 import { elegibles, elegirTarjetas, paretoFrontier } from "../scoring/tiers";
-import { METRIC_CONFIG, PERFILES, type PerfilId } from "../scoring/config";
+import {
+  METRICAS_ACTIVAS,
+  METRIC_CONFIG,
+  PERFILES,
+  THRESHOLDS,
+  TOKEN_MIX,
+  pesosDelPerfil,
+  type PerfilId,
+} from "../scoring/config";
 import { SOURCES } from "../sources/registry";
 
 const perfilValidator = v.union(
   v.literal("general"),
   v.literal("mantenimiento"),
   v.literal("agentico"),
-  v.literal("greenfield"),
 );
 
 const filtros = {
@@ -52,6 +59,7 @@ function aTarjeta(s: Scored) {
     qualityLo: Math.round(s.qualityLo * 10) / 10,
     qualityHi: Math.round(s.qualityHi * 10) / 10,
     coverage: Math.round(s.coverage * 100) / 100,
+    benchmarks: s.benchmarks,
     confidence: s.confidence,
     cost: s.cost !== undefined ? Math.round(s.cost * 100) / 100 : undefined,
     costMeasured: s.costMeasured,
@@ -112,8 +120,9 @@ export const recomendaciones = query({
       tarjetas: tarjetas.map((t) => ({
         tier: t.tier,
         razon: t.razon,
+        razonCorta: t.razonCorta,
         ganador: aTarjeta(t.ganador),
-        segundo: t.segundo ? aTarjeta(t.segundo) : null,
+        alternativas: t.alternativas.map(aTarjeta),
       })),
       frontera: frontera
         .sort((a, b) => b.quality - a.quality)
@@ -177,15 +186,29 @@ export const modelo = query({
 export const metodologia = query({
   args: {},
   handler: async () => ({
-    metricas: Object.entries(METRIC_CONFIG)
-      .filter(([, c]) => c.weight > 0)
-      .map(([metric, c]) => ({
-        metric,
-        etiqueta: c.label,
-        peso: c.weight,
-        vidaMediaMeses: c.halfLifeMonths,
-      })),
-    perfiles: Object.entries(PERFILES).map(([id, p]) => ({ id, etiqueta: p.label })),
+    metricas: (() => {
+      const pesos = pesosDelPerfil("general");
+      return Object.entries(METRIC_CONFIG)
+        .filter(([, c]) => c.activa)
+        .map(([metric, c]) => ({
+          metric,
+          etiqueta: c.label,
+          peso: pesos[metric as keyof typeof pesos],
+          vidaMediaMeses: c.halfLifeMonths,
+        }));
+    })(),
+    perfiles: Object.entries(PERFILES).map(([id, p]) => ({
+      id,
+      etiqueta: p.label,
+      mide: (p.mide ?? METRICAS_ACTIVAS()).map((m) => METRIC_CONFIG[m].label),
+    })),
+    umbrales: {
+      benchmarksMinimos: THRESHOLDS.benchmarksMinimos,
+      pisoCalidadBarato: THRESHOLDS.pisoCalidadBarato,
+      pisoCalidadDiaADia: THRESHOLDS.pisoCalidadDiaADia,
+      percentilCostoBarato: THRESHOLDS.percentilCostoBarato,
+    },
+    mezclaDeTokens: TOKEN_MIX,
     fuentes: SOURCES.map((s) => ({
       id: s.id,
       nombre: s.name,

@@ -1,59 +1,154 @@
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { AvisoSemilla } from "@/components/aviso-semilla";
-import { obtenerMetodologia, usandoSemilla } from "@/lib/datos";
+import { obtenerEstado, obtenerMetodologia } from "@/lib/datos";
+import { es } from "@/lib/i18n/es";
+import { hace } from "@/lib/tiempo";
+import { cn } from "@/lib/utils";
+import type { EstadoDelPipeline, Fuente, ResultadoDeFuente } from "@/lib/types";
 
 export const metadata = { title: "Estado" };
+
+const fecha = (ts: number) =>
+  new Intl.DateTimeFormat("es", { day: "numeric", month: "short" }).format(ts);
 
 /**
  * Una web de datos que no enseña cuándo se actualizó por última vez está
  * pidiendo que se confíe a ciegas. Esta página existe para no tener que hacerlo.
+ *
+ * De ahí que cada fila diga lo que de verdad se sabe de esa fuente y no un
+ * adorno: "listo · hace 12 s" y "falló · usando el 4 sep" son dos cosas
+ * distintas, y la segunda es justo la que un sitio con menos vergüenza se
+ * callaría.
  */
 export default async function Estado() {
-  const { fuentes } = await obtenerMetodologia();
+  const [{ fuentes }, estado] = await Promise.all([obtenerMetodologia(), obtenerEstado()]);
+
+  const corrida = estado?.ultimaCorrida ?? null;
+  const enMarcha = corrida !== null && corrida.finishedAt === undefined;
+  const leidas = corrida?.results.length ?? 0;
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-5 py-12">
-      <header className="flex flex-col gap-3">
-        <h1 className="font-heading text-4xl font-semibold tracking-tight">Estado del pipeline</h1>
-        <p className="text-pretty text-muted-foreground">
+    <main className="mx-auto flex w-full max-w-[620px] flex-col gap-[22px] px-5 py-10 sm:px-[30px]">
+      <div className="flex flex-col gap-2">
+        <h1 className="font-heading text-[30px] leading-[1.05] font-semibold tracking-[-0.03em]">
+          Estado del pipeline
+        </h1>
+        <p className="text-pretty text-sm leading-[1.55] text-muted-foreground">
           El cron corre una vez al día a las 06:00 UTC. Cada fuente se descarga por separado: si
           una falla, las demás siguen y aquí se ve desde cuándo.
         </p>
-      </header>
+      </div>
 
       <AvisoSemilla />
 
-      <section className="flex flex-col gap-4">
-        <Separator />
-        <h2 className="font-heading text-lg font-semibold">Fuentes</h2>
-        <ul className="flex flex-col gap-3">
-          {fuentes.map((f) => (
-            <li key={f.id} className="flex flex-wrap items-baseline justify-between gap-3">
-              <div className="flex flex-col gap-0.5">
-                <span className="font-medium">{f.nombre}</span>
-                <span className="font-mono text-xs text-muted-foreground">{f.id}</span>
-              </div>
-              <Badge variant={f.activa ? "secondary" : "outline"}>
-                {f.activa ? "activa" : "apagada"}
-              </Badge>
-            </li>
-          ))}
-        </ul>
-      </section>
+      {enMarcha ? (
+        <div className="flex items-center gap-3 rounded-[10px] border border-primary/30 bg-primary/[0.06] px-4 py-3.5">
+          <span className="size-[9px] shrink-0 rounded-full bg-primary" />
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[13.5px] leading-[1.3] font-medium">
+              Actualizando ahora: {leidas} de {fuentes.length} fuentes leídas
+            </span>
+            <span className="font-mono text-xs leading-[1.3] text-muted-foreground">
+              empezó {hace(corrida.startedAt)}
+            </span>
+          </div>
+        </div>
+      ) : null}
 
-      {usandoSemilla ? null : (
-        <section className="flex flex-col gap-3">
-          <Separator />
-          <h2 className="font-heading text-lg font-semibold">Últimas corridas</h2>
-          <p className="text-sm text-muted-foreground">
-            El detalle por corrida —qué fuente cambió, cuántas observaciones entraron y qué nombres
-            quedaron sin resolver— vive en la tabla <code className="font-mono">ingestRuns</code> de
-            Convex y se consulta con{" "}
-            <code className="font-mono">npx convex run ingest/runs:estado</code>.
-          </p>
-        </section>
-      )}
+      <div className="flex flex-col overflow-hidden rounded-[10px] border">
+        {fuentes.map((f) => (
+          <FilaDeFuente
+            key={f.id}
+            fuente={f}
+            estado={estado}
+            resultado={corrida?.results.find((r) => r.sourceId === f.id)}
+            corridaEnMarcha={enMarcha}
+          />
+        ))}
+      </div>
+
+      {estado?.sinResolver.length ? (
+        <div className="flex flex-col gap-1.5 rounded-[10px] border border-dashed px-4 py-3.5">
+          <span className="text-[12.5px] leading-[1.3] font-medium">
+            {estado.sinResolver.length} {es.estado.sinResolver.toLowerCase()} en esta corrida
+          </span>
+          <span className="font-mono text-[11.5px] leading-[1.6] text-muted-foreground">
+            {estado.sinResolver.slice(0, 8).map((u) => `«${u.sourceKey}»`).join(" · ")}
+          </span>
+        </div>
+      ) : null}
     </main>
   );
+}
+
+function FilaDeFuente({
+  fuente,
+  estado,
+  resultado,
+  corridaEnMarcha,
+}: {
+  fuente: Fuente;
+  estado: EstadoDelPipeline | null;
+  resultado?: ResultadoDeFuente;
+  corridaEnMarcha: boolean;
+}) {
+  const seguimiento = estado?.fuentes.find((s) => s.sourceId === fuente.id);
+  const { texto, tono, detalle } = leer(fuente, seguimiento, resultado, corridaEnMarcha);
+
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-between gap-3 border-t border-border px-4 py-3 first:border-t-0",
+        !fuente.activa && "opacity-55",
+      )}
+    >
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="truncate text-[13.5px] leading-[1.2] font-medium">{fuente.nombre}</span>
+        <span className="truncate font-mono text-[11.5px] leading-[1.2] text-muted-foreground">
+          {fuente.id}
+          {detalle ? ` · ${detalle}` : ""}
+        </span>
+      </div>
+      <span className={cn("shrink-0 font-mono text-xs leading-[1.2]", tono)}>{texto}</span>
+    </div>
+  );
+}
+
+/** Qué se sabe de una fuente, en las palabras exactas que se pueden defender. */
+function leer(
+  fuente: Fuente,
+  seguimiento: EstadoDelPipeline["fuentes"][number] | undefined,
+  resultado: ResultadoDeFuente | undefined,
+  corridaEnMarcha: boolean,
+): { texto: string; tono: string; detalle?: string } {
+  if (!fuente.activa) {
+    return { texto: es.estado.apagada, tono: "text-muted-foreground", detalle: fuente.nota };
+  }
+
+  if (resultado?.status === "error") {
+    const desde = seguimiento?.lastOkAt;
+    return {
+      texto: desde ? `${es.estado.fallo} · usando el ${fecha(desde)}` : es.estado.fallo,
+      tono: "text-destructive",
+      detalle: resultado.error,
+    };
+  }
+
+  if (resultado?.status === "ok" || resultado?.status === "sin_cambios") {
+    const cuando = hace(seguimiento?.lastOkAt ?? seguimiento?.lastRunAt);
+    return {
+      texto: cuando ? `${es.estado.listo} · ${cuando}` : es.estado.listo,
+      tono: "text-ok",
+      detalle:
+        resultado.observations !== undefined
+          ? `${resultado.observations} observaciones`
+          : undefined,
+    };
+  }
+
+  if (corridaEnMarcha) return { texto: es.estado.enCola, tono: "text-muted-foreground" };
+
+  const cuando = hace(seguimiento?.lastOkAt);
+  if (cuando) return { texto: `${es.estado.listo} · ${cuando}`, tono: "text-ok" };
+
+  return { texto: es.estado.sinCorridas, tono: "text-muted-foreground" };
 }

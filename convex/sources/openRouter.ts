@@ -2,7 +2,7 @@ import type { CatalogSource, ParsedCatalogEntry } from "./types";
 import { slugify } from "../matching/normalize";
 
 /**
- * OpenRouter — segunda opinión sobre precios y, sobre todo, disponibilidad
+ * OpenRouter: segunda opinión sobre precios y, sobre todo, disponibilidad
  * real: si un modelo está aquí, cualquiera puede usarlo sin contrato directo.
  *
  * Los precios vienen como USD por token en cadenas ("0.00001"); los pasamos a

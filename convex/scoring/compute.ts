@@ -52,6 +52,8 @@ export type Scored = Candidate & {
   qualityLo: number;
   qualityHi: number;
   coverage: number;
+  /** Fuentes distintas que midieron esta variante dentro del perfil. */
+  benchmarks: number;
   confidence: "alta" | "media" | "baja";
   cost?: number;
   costMeasured: boolean;
@@ -187,6 +189,11 @@ export function scoreCandidate(
   }
 
   const coverage = totalWeight;
+  // Cuántas fuentes distintas lo midieron, que es lo que decide si puede ser
+  // una respuesta. La cobertura se sigue guardando porque dice otra cosa:
+  // cuánto del perfil está medido, ya descontada la antigüedad.
+  const benchmarks = breakdown.length;
+  const delPerfil = Object.values(pesos).filter((p) => p > 0).length;
   const quality = totalWeight > 0 ? (sum / totalWeight) * 100 : 0;
   const qualityLo = totalWeight > 0 ? (sumLo / totalWeight) * 100 : 0;
   const qualityHi = totalWeight > 0 ? (sumHi / totalWeight) * 100 : 0;
@@ -203,10 +210,11 @@ export function scoreCandidate(
     qualityLo,
     qualityHi,
     coverage,
+    benchmarks,
     confidence:
-      coverage >= THRESHOLDS.coberturaAlta
+      benchmarks >= delPerfil
         ? "alta"
-        : coverage >= THRESHOLDS.coberturaMinima
+        : benchmarks >= THRESHOLDS.benchmarksMinimos
           ? "media"
           : "baja",
     cost: measured ?? (price !== undefined && costFactor ? price * costFactor : undefined),

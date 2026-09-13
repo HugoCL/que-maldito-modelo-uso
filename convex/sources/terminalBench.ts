@@ -2,7 +2,7 @@ import type { BenchmarkSource, ParsedObservation } from "./types";
 import { normalizeEffort } from "../matching/normalize";
 
 /**
- * Terminal-Bench 2.0 (Stanford / Harbor / Laude Institute) — tareas de terminal
+ * Terminal-Bench 2.0 (Stanford / Harbor / Laude Institute): tareas de terminal
  * de punta a punta: compilar, administrar servidores, ciencia de datos.
  *
  * La página es Next.js y serializa las filas en el payload de flight con las
@@ -91,7 +91,7 @@ export const terminalBench: BenchmarkSource = {
   name: "Terminal-Bench 2.0",
   homepage: "https://www.tbench.ai/leaderboard/terminal-bench/2.0",
   url: "https://www.tbench.ai/leaderboard/terminal-bench/2.0",
-  attribution: "Terminal-Bench 2.0 — Stanford / Harbor / Laude Institute",
+  attribution: "Terminal-Bench 2.0, de Stanford / Harbor / Laude Institute",
   license: "Leaderboard público; el sitio no publica robots.txt y marca noindex.",
   enabled: true,
   note: "Un fetch al día, User-Agent identificable. Cada fila es agente+modelo: nos quedamos con el mejor por modelo.",

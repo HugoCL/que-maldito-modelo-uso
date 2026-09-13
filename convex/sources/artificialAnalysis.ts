@@ -1,7 +1,7 @@
 import type { BenchmarkSource, ParsedObservation } from "./types";
 
 /**
- * Artificial Analysis — APAGADA a propósito.
+ * Artificial Analysis: APAGADA a propósito.
  *
  * Sus términos de API gratuita dicen "internal use only; no redistribution".
  * Publicar sus índices en un sitio público ES redistribuir, así que esta fuente

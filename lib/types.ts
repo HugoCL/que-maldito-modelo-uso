@@ -7,7 +7,7 @@
  */
 
 export type Tier = "barato" | "dia_a_dia" | "bueno";
-export type PerfilId = "general" | "mantenimiento" | "agentico" | "greenfield";
+export type PerfilId = "general" | "mantenimiento" | "agentico";
 export type Confianza = "alta" | "media" | "baja";
 
 export type MetricaDeVariante = {
@@ -28,6 +28,8 @@ export type Variante = {
   qualityLo: number;
   qualityHi: number;
   coverage: number;
+  /** Fuentes distintas que midieron esta variante. */
+  benchmarks: number;
   confidence: Confianza;
   cost?: number;
   costMeasured: boolean;
@@ -44,8 +46,10 @@ export type Variante = {
 export type Tarjeta = {
   tier: Tier;
   razon: string;
+  razonCorta: string;
   ganador: Variante;
-  segundo: Variante | null;
+  /** Suplentes de esta misma tarjeta, de mejor a peor. Puede venir vacía. */
+  alternativas: Variante[];
 };
 
 export type Recomendaciones = {
@@ -98,6 +102,49 @@ export type Metodologia = {
     peso: number;
     vidaMediaMeses: number | null;
   }>;
-  perfiles: Array<{ id: string; etiqueta: string }>;
+  /** `mide` son las etiquetas de los benchmarks que cuentan en ese perfil. */
+  perfiles: Array<{ id: string; etiqueta: string; mide: string[] }>;
+  /** Los umbrales que deciden quién puede ser respuesta, tal cual se aplican. */
+  umbrales: {
+    benchmarksMinimos: number;
+    pisoCalidadBarato: number;
+    pisoCalidadDiaADia: number;
+    percentilCostoBarato: number;
+  };
+  /** Mezcla de tokens con la que se estima el costo de lo no medido. */
+  mezclaDeTokens: { cacheRead: number; input: number; output: number };
   fuentes: Fuente[];
+};
+
+export type ResultadoDeFuente = {
+  sourceId: string;
+  status: "ok" | "sin_cambios" | "error" | "omitida";
+  observations?: number;
+  unresolved?: number;
+  durationMs?: number;
+  error?: string;
+};
+
+export type EstadoDelPipeline = {
+  ultimaCorrida: {
+    startedAt: number;
+    finishedAt?: number;
+    trigger: "cron" | "manual";
+    results: ResultadoDeFuente[];
+  } | null;
+  fuentes: Array<{
+    sourceId: string;
+    enabled: boolean;
+    lastRunAt?: number;
+    lastOkAt?: number;
+    lastError?: string;
+    consecutiveFailures?: number;
+  }>;
+  sinResolver: Array<{
+    sourceId: string;
+    sourceKey: string;
+    suggestion?: string;
+    suggestionScore?: number;
+    timesSeen: number;
+  }>;
 };

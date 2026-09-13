@@ -2,7 +2,7 @@ import type { BenchmarkSource, ParsedObservation } from "./types";
 import { splitEffort } from "../matching/normalize";
 
 /**
- * CursorBench 4.0 — tareas ambiguas y multi-archivo sacadas de sesiones reales
+ * CursorBench 4.0: tareas ambiguas y multi-archivo sacadas de sesiones reales
  * de Cursor. La página se renderiza en el servidor, así que la tabla completa
  * viene en el HTML: rank, modelo, score, costo/tarea, tokens/tarea, pasos/tarea.
  *
@@ -65,7 +65,7 @@ export const cursorBench: BenchmarkSource = {
   name: "CursorBench 4.0",
   homepage: "https://cursor.com/cursorbench",
   url: "https://cursor.com/cursorbench",
-  attribution: "CursorBench 4.0 — Cursor",
+  attribution: "CursorBench 4.0, de Cursor",
   license: "Leaderboard público; robots.txt permite /cursorbench explícitamente.",
   enabled: true,
   parse,

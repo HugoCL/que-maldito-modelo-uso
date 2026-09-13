@@ -4,7 +4,7 @@ import { internal } from "../_generated/api";
 import { SOURCES } from "../sources/registry";
 import type { ParsedObservation, Source } from "../sources/types";
 import { buildIndex, resolveModel } from "../matching/resolve";
-import { fetchSource } from "./snapshot";
+import { MAX_EN_DOCUMENTO, fetchSource } from "./snapshot";
 
 /**
  * Una corrida del pipeline: baja cada fuente, la parsea, resuelve identidades
@@ -87,10 +87,16 @@ export const runAll = internalAction({
           continue;
         }
 
+        // Guardar la copia cruda antes de parsear: si el parser se rompe con
+        // una maquetación nueva, el cuerpo queda para verlo sin volver a pedirlo.
+        const crudo = new Blob([body]);
+        const enFichero = crudo.size > MAX_EN_DOCUMENTO;
         const snapshotId = await ctx.runMutation(internal.ingest.snapshot.guardarSnapshot, {
           sourceId: source.id,
           contentHash,
-          body,
+          body: enFichero ? undefined : body,
+          storageId: enFichero ? await ctx.storage.store(crudo) : undefined,
+          byteLength: crudo.size,
         });
 
         let escritas = 0;

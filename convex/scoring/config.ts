@@ -6,8 +6,12 @@ import type { Metric } from "../sources/types";
  */
 
 export type MetricConfig = {
-  weight: number;
   label: string;
+  /**
+   * Si entra en el cálculo. Apagar una métrica es la única forma de que deje
+   * de contar: no hay pesos con los que hundirla a medias.
+   */
+  activa: boolean;
   /**
    * Vida media en meses para el descuento por antigüedad. Un benchmark que
    * lleva medio año sin correrse no dice lo mismo que uno de esta semana.
@@ -16,20 +20,27 @@ export type MetricConfig = {
   halfLifeMonths: number | null;
 };
 
+/**
+ * Los benchmarks que sabemos leer. Ninguno pesa más que otro.
+ *
+ * Nadie sabe si CursorBench vale exactamente 1.2 veces lo que vale DeepSWE, y
+ * un número con dos decimales parece medido aunque esté inventado. Los que
+ * entran valen lo mismo. Lo único que se decide es cuáles entran: una decisión
+ * discreta, que se explica en una frase y se audita mirando esta lista.
+ */
 export const METRIC_CONFIG: Record<Metric, MetricConfig> = {
   // Tareas ambiguas multi-archivo de sesiones reales. Lo más cercano al trabajo.
-  "cursorbench.score": { weight: 0.3, label: "CursorBench 4.0", halfLifeMonths: null },
+  "cursorbench.score": { label: "CursorBench 4.0", activa: true, halfLifeMonths: null },
   // Tareas largas en 91 repos, 4 corridas completas, con intervalos publicados.
-  "deepswe.pass_at_1": { weight: 0.25, label: "DeepSWE v1.1", halfLifeMonths: null },
+  "deepswe.pass_at_1": { label: "DeepSWE v1.1", activa: true, halfLifeMonths: null },
   // Trabajo agéntico de terminal de punta a punta.
-  "terminalbench.accuracy": { weight: 0.2, label: "Terminal-Bench 2.0", halfLifeMonths: null },
-  // Tareas nuevas cada mes: la señal que resiste contaminación.
-  "swerebench.resolved_rate": { weight: 0.15, label: "SWE-rebench", halfLifeMonths: 12 },
-  // El clásico. Mide agente+modelo y se actualiza despacio: pesa poco y decae.
-  "swebench_verified.resolved": { weight: 0.1, label: "SWE-bench Verified", halfLifeMonths: 9 },
+  "terminalbench.accuracy": { label: "Terminal-Bench 2.0", activa: true, halfLifeMonths: null },
   // Apagada por licencia. Ver convex/sources/artificialAnalysis.ts.
-  "aa.coding_index": { weight: 0, label: "Artificial Analysis", halfLifeMonths: null },
+  "aa.coding_index": { label: "Artificial Analysis", activa: false, halfLifeMonths: null },
 };
+
+export const METRICAS_ACTIVAS = (): Metric[] =>
+  (Object.keys(METRIC_CONFIG) as Metric[]).filter((m) => METRIC_CONFIG[m].activa);
 
 /**
  * Mezcla de tokens de una sesión agéntica de código, para convertir precios de
@@ -48,20 +59,24 @@ export const TOKEN_MIX_SIN_CACHE = { input: 0.75, output: 0.25 };
 /**
  * Fuentes cuyo costo por tarea es comparable entre sí.
  *
- * No todo "$ por tarea" mide lo mismo. DeepSWE y CursorBench cuestan tareas
- * largas y ambiguas con un andamio fijo, así que sus cifras se pueden poner
- * una al lado de la otra. El `instance_cost` de SWE-bench Verified, en cambio,
- * lo reporta cada quien con su propio andamio sobre tareas mucho más fáciles:
- * mezclarlo hace aparecer modelos "baratísimos" que no lo son. Se sigue
- * guardando y mostrando en la ficha del modelo, pero no entra al eje de costo.
+ * No todo "$ por tarea" mide lo mismo: hace falta que el andamio sea el mismo
+ * y que las tareas se parezcan. Estas tres cuestan tareas largas y ambiguas
+ * con un andamio fijo, así que sus cifras se pueden poner una al lado de la
+ * otra. Una fuente nueva no entra aquí por defecto: entra cuando se ha mirado
+ * cómo mide.
  */
 export const COST_TRUSTED_SOURCES = ["deepswe", "cursorbench", "terminalbench"];
 
 export const THRESHOLDS = {
-  /** Debajo de esta cobertura de pesos, la variante no puede ganar tarjeta. */
-  coberturaMinima: 0.5,
-  /** Cobertura a partir de la cual la confianza se considera alta. */
-  coberturaAlta: 0.7,
+  /**
+   * Benchmarks distintos que tiene que haber medido a una variante para que
+   * pueda ganar tarjeta.
+   *
+   * Se cuentan fuentes y no fracciones de peso. En un perfil que mira dos
+   * benchmarks, "la mitad de los pesos" sería un benchmark solo, justo lo que
+   * esta regla existe para impedir.
+   */
+  benchmarksMinimos: 2,
   /** "Barato" no recomienda basura: mínimo 60% de la calidad del líder. */
   pisoCalidadBarato: 0.6,
   /** "Día a día" no baja de 75% de la calidad del líder. */
@@ -70,48 +85,71 @@ export const THRESHOLDS = {
   percentilCostoBarato: 0.33,
 };
 
-/** Perfiles de tarea: reordenan los pesos sin cambiar el motor. */
-export type PerfilId = "general" | "mantenimiento" | "agentico" | "greenfield";
+/**
+ * Perfiles de tarea.
+ *
+ * Un perfil no reordena decimales: dice QUÉ benchmarks miden ese tipo de
+ * trabajo. Los que entran siguen valiendo lo mismo entre sí. Así la pregunta
+ * que hay que discutir cuando una recomendación sorprende es una que se puede
+ * contestar ("¿mide Terminal-Bench el trabajo de arreglar bugs?") y no una que
+ * no se puede, que es cuánto vale 0.35 frente a 0.30.
+ *
+ * `mide: null` = todos los benchmarks activos.
+ */
+export type PerfilId = "general" | "mantenimiento" | "agentico";
 
-export const PERFILES: Record<PerfilId, { label: string; pesos: Partial<Record<Metric, number>> }> = {
-  general: { label: "Cualquier cosa", pesos: {} },
+/**
+ * Cada perfil se dice de tres maneras: `label` cuando hay sitio para una frase,
+ * `corto` en la barra de la portada, que es una línea en minúscula, y
+ * `descripcion` al pasar el ratón por encima. Lo de las dos voces ya lo hacen
+ * los tiers en lib/i18n/es.ts; la tercera existe porque el nombre de un perfil
+ * nunca va a caber en una pastilla y quien elige necesita saber qué está
+ * eligiendo.
+ */
+export const PERFILES: Record<
+  PerfilId,
+  { label: string; corto: string; descripcion: string; mide: Metric[] | null }
+> = {
+  general: {
+    label: "Cualquier cosa",
+    corto: "cualquier cosa",
+    descripcion: "Sin distinguir el tipo de trabajo: cuenta todo lo que hay medido.",
+    mide: null,
+  },
   mantenimiento: {
-    label: "Mantenimiento y bugs",
-    // Arreglar issues reales en repos ajenos: eso es exactamente SWE-*.
-    pesos: {
-      "swerebench.resolved_rate": 0.3,
-      "swebench_verified.resolved": 0.15,
-      "cursorbench.score": 0.3,
-      "deepswe.pass_at_1": 0.25,
-      "terminalbench.accuracy": 0.1,
-    },
+    label: "Arreglar bugs",
+    corto: "arreglar bugs",
+    descripcion:
+      "Trabajo sobre código que ya existe: cerrar issues y cambios repartidos por varios archivos.",
+    // DeepSWE es literalmente cerrar issues de repos ajenos y CursorBench son
+    // sesiones reales multi-archivo. Los dos miden trabajo sobre código que ya
+    // existe, que es de lo que va este perfil.
+    mide: ["cursorbench.score", "deepswe.pass_at_1"],
   },
   agentico: {
-    label: "Agente suelto",
-    // Correr solo, muchos pasos, terminal incluida.
-    pesos: {
-      "terminalbench.accuracy": 0.35,
-      "deepswe.pass_at_1": 0.35,
-      "cursorbench.score": 0.25,
-      "swerebench.resolved_rate": 0.1,
-      "swebench_verified.resolved": 0.05,
-    },
+    label: "Sin supervisión",
+    corto: "sin supervisión",
+    descripcion:
+      "Tareas largas, de muchos pasos y con terminal, que corren sin nadie delante.",
+    // Correr solo, muchos pasos, terminal incluida. CursorBench queda fuera:
+    // sus tareas vienen de sesiones con alguien delante. Es el perfil más
+    // exigente porque es del que menos gente publica datos.
+    mide: ["terminalbench.accuracy", "deepswe.pass_at_1"],
   },
-  greenfield: {
-    label: "Código nuevo",
-    // Escribir de cero se parece más a las tareas largas y ambiguas.
-    pesos: {
-      "deepswe.pass_at_1": 0.35,
-      "cursorbench.score": 0.4,
-      "terminalbench.accuracy": 0.15,
-      "swerebench.resolved_rate": 0.1,
-    },
-  },
+  // No hay perfil de "código nuevo" porque ningún benchmark activo mide
+  // escribir de cero: DeepSWE parte de un issue con su test ya escrito y
+  // CursorBench de una sesión sobre un repo que existe. Ese perfil miraría los
+  // mismos dos que "mantenimiento" y daría la misma respuesta, y un control que
+  // no cambia nada promete una elección que no existe.
 };
 
+/** Reparto a partes iguales entre los benchmarks que mide el perfil. */
 export function pesosDelPerfil(perfil: PerfilId): Record<Metric, number> {
-  const base = Object.fromEntries(
-    Object.entries(METRIC_CONFIG).map(([m, c]) => [m, c.weight]),
+  const activas = METRICAS_ACTIVAS();
+  const cuentan = (PERFILES[perfil].mide ?? activas).filter((m) => activas.includes(m));
+  const peso = cuentan.length ? 1 / cuentan.length : 0;
+
+  return Object.fromEntries(
+    (Object.keys(METRIC_CONFIG) as Metric[]).map((m) => [m, cuentan.includes(m) ? peso : 0]),
   ) as Record<Metric, number>;
-  return { ...base, ...PERFILES[perfil].pesos };
 }

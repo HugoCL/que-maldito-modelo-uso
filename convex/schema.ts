@@ -24,8 +24,6 @@ export const METRICS = [
   "cursorbench.score",
   "deepswe.pass_at_1",
   "terminalbench.accuracy",
-  "swerebench.resolved_rate",
-  "swebench_verified.resolved",
   "aa.coding_index",
 ] as const;
 
@@ -59,7 +57,10 @@ export default defineSchema({
   rawSnapshots: defineTable({
     sourceId: v.string(),
     contentHash: v.string(),
-    body: v.string(),
+    /** La copia cruda, cuando cabe en un documento. Ver `storageId`. */
+    body: v.optional(v.string()),
+    /** Donde vive la copia cuando pasa del límite de un documento. */
+    storageId: v.optional(v.id("_storage")),
     byteLength: v.number(),
     fetchedAt: v.number(),
   })
@@ -218,7 +219,8 @@ export default defineSchema({
   rankings: defineTable({
     tier: tierValidator,
     variantId: v.id("variants"),
-    runnerUpVariantId: v.optional(v.id("variants")),
+    /** Las otras respuestas de ese tier, en orden, por si la primera no se puede usar. */
+    alternativeVariantIds: v.array(v.id("variants")),
     quality: v.number(),
     cost: v.optional(v.number()),
     costMeasured: v.boolean(),

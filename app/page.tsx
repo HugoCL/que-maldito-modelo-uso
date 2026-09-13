@@ -1,23 +1,30 @@
 import { Suspense } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
-import { Skeleton } from "@/components/ui/skeleton";
+import Link from "next/link";
 import { AvisoSemilla } from "@/components/aviso-semilla";
-import { BarraDeFiltros } from "@/components/barra-de-filtros";
+import {
+  BarraDeFiltros,
+  PERFILES_VALIDOS,
+  enlace,
+  type ParamsPortada,
+} from "@/components/barra-de-filtros";
+import { FilaRecomendacion } from "@/components/fila-recomendacion";
 import { FronteraCalidadCosto } from "@/components/frontera-calidad-costo";
-import { TarjetaRecomendacion } from "@/components/tarjeta-recomendacion";
-import { obtenerRecomendaciones } from "@/lib/datos";
+import { TituloMutante } from "@/components/titulo-mutante";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  fechaDeLaSemilla,
+  obtenerMetodologia,
+  obtenerRecomendaciones,
+  usandoSemilla,
+} from "@/lib/datos";
 import { es } from "@/lib/i18n/es";
+import { hace } from "@/lib/tiempo";
 import type { PerfilId } from "@/lib/types";
-
-const PERFILES_VALIDOS: PerfilId[] = ["general", "mantenimiento", "agentico", "greenfield"];
-
-type Params = { perfil?: string; max?: string; abiertos?: string };
 
 export default async function Inicio({
   searchParams,
 }: {
-  searchParams: Promise<Params>;
+  searchParams: Promise<ParamsPortada>;
 }) {
   const params = await searchParams;
   const perfil = PERFILES_VALIDOS.includes(params.perfil as PerfilId)
@@ -25,95 +32,124 @@ export default async function Inicio({
     : "general";
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-5 py-12 sm:py-16">
-      <section className="flex flex-col gap-4">
-        <h1 className="max-w-3xl text-balance font-heading text-4xl leading-[1.05] font-semibold tracking-tight sm:text-6xl">
-          {es.marca.nombre}
-        </h1>
-        <p className="max-w-xl text-pretty text-base text-muted-foreground sm:text-lg">
-          {es.marca.lema}
-        </p>
+    <main className="mx-auto flex w-full max-w-[940px] flex-col gap-[30px] px-5 py-10 sm:px-[30px] sm:py-[40px]">
+      <section className="flex flex-col gap-2.5">
+        <TituloMutante
+          texto={es.marca.nombreEntero}
+          palabra={es.marca.palabrota}
+          className="max-w-[640px] text-balance font-heading text-[34px] leading-[1.05] font-semibold tracking-[-0.03em] sm:text-[44px]"
+        />
+        <p className="text-[15px] leading-[1.5] text-muted-foreground">{es.marca.lema}</p>
       </section>
 
       <AvisoSemilla />
 
-      <Suspense fallback={<EsqueletoFiltros />}>
-        <BarraDeFiltros />
-      </Suspense>
+      <BarraDeFiltros params={params} perfil={perfil} techo={params.max ?? ""} />
 
-      <Suspense key={JSON.stringify(params)} fallback={<EsqueletoTarjetas />}>
+      <Suspense key={JSON.stringify(params)} fallback={<Esqueleto />}>
         <Respuestas perfil={perfil} params={params} />
       </Suspense>
     </main>
   );
 }
 
-async function Respuestas({ perfil, params }: { perfil: PerfilId; params: Params }) {
-  const datos = await obtenerRecomendaciones(perfil);
-
-  // El filtrado por presupuesto y pesos abiertos se aplica sobre el resultado
-  // ya puntuado. Convex lo hace en el servidor sobre el conjunto completo; en
-  // modo semilla se recorta aquí sobre la frontera guardada.
+async function Respuestas({ perfil, params }: { perfil: PerfilId; params: ParamsPortada }) {
   const techo = params.max ? Number(params.max) : undefined;
   const soloAbiertos = params.abiertos === "1";
-  const pasa = (coste?: number, abierto?: boolean) =>
-    (techo === undefined || (coste ?? Infinity) <= techo) && (!soloAbiertos || !!abierto);
+  const hayFiltros = techo !== undefined || soloAbiertos;
 
-  const tarjetas = datos.tarjetas.filter((t) => pasa(t.ganador.cost, t.ganador.openWeights));
-  const frontera = datos.frontera.filter((v) => pasa(v.cost, v.openWeights));
+  // Dos respuestas y no una: la de arriba es la que contesta con los filtros
+  // puestos, y la de abajo, siempre sin filtrar, es la que le da al gráfico la
+  // frontera entera. El techo vela lo que descarta en vez de borrarlo: un
+  // filtro que esconde lo que quita deja sin saber a qué se está renunciando.
+  const [sinFiltrar, filtrada, metodologia] = await Promise.all([
+    obtenerRecomendaciones(perfil),
+    hayFiltros
+      ? obtenerRecomendaciones(perfil, {
+          presupuestoMax: techo,
+          soloOpenWeights: soloAbiertos || undefined,
+        })
+      : undefined,
+    obtenerMetodologia(),
+  ]);
+
+  const datos = filtrada ?? sinFiltrar;
+  const tarjetas = datos.tarjetas;
+  const frontera = sinFiltrar.frontera;
 
   if (tarjetas.length === 0) {
     return (
-      <Empty>
-        <EmptyHeader>
-          <EmptyTitle>{es.vacio.titulo}</EmptyTitle>
-          <EmptyDescription>{es.vacio.descripcion}</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <div className="flex flex-col gap-2 rounded-[10px] border border-dashed px-5 py-8 text-center">
+        <p className="font-heading text-lg font-semibold">{es.vacio.titulo}</p>
+        <p className="mx-auto max-w-md text-pretty text-[13px] leading-relaxed text-muted-foreground">
+          {es.vacio.descripcion}
+        </p>
+        {/* Quita las dos restricciones, no el perfil: el tipo de tarea cambia
+            los pesos, nunca deja fuera a nadie, así que no puede ser la causa
+            de que no quede ninguna respuesta. */}
+        <Link
+          href={enlace(params, { max: "", abiertos: "" })}
+          className="mt-1 font-mono text-[13px] underline-offset-4 hover:underline"
+        >
+          {es.filtros.limpiar.toLowerCase()}
+        </Link>
+      </div>
     );
   }
 
+  // El sello nombra lo que produce los dos números de arriba: los benchmarks
+  // que puntúan la calidad y el catálogo del que salen precios y fechas. La
+  // atribución completa, con enlaces (que es lo que piden las licencias), va
+  // en el pie de página y sale de esta misma lista.
+  const activas = metodologia.fuentes.filter((f) => f.activa);
+  const fuentes = [
+    ...activas.filter((f) => f.tipo === "benchmark"),
+    ...activas.filter((f) => f.tipo === "catalogo").slice(0, 1),
+  ].map((f) => f.nombre);
+
   return (
-    <div className="flex flex-col gap-10">
-      <div className="grid gap-5 lg:grid-cols-3">
+    <>
+      <div className="flex flex-col overflow-hidden rounded-[10px] border">
         {tarjetas.map((t) => (
-          <TarjetaRecomendacion key={t.tier} tarjeta={t} />
+          <FilaRecomendacion key={t.tier} tarjeta={t} />
         ))}
+
+        <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 border-t bg-muted/40 px-4 py-[11px] font-mono text-[11.5px] text-muted-foreground sm:grid sm:grid-cols-[150px_minmax(0,1fr)_90px_96px] sm:gap-6 sm:px-[22px]">
+          <span className="hidden sm:block" />
+          <span>{es.portada.pieDeTabla(metodologia.metricas.length)}</span>
+          <span className="hidden sm:block sm:text-right">{es.portada.calidad}</span>
+          <span className="hidden sm:block sm:text-right">{es.portada.porTarea}</span>
+        </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <Badge variant="outline" className="font-mono">
-          {datos.totales.candidatos} variantes
-        </Badge>
-        <Badge variant="outline" className="font-mono">
-          {datos.totales.elegibles} con datos suficientes
-        </Badge>
-        <Badge variant="outline" className="font-mono">
-          {frontera.length} en la frontera
-        </Badge>
-        <span>
-          Una variante es un modelo a un nivel de reasoning effort: &ldquo;Opus 5 en medium&rdquo; y
-          &ldquo;Opus 5 en max&rdquo; no cuestan ni rinden lo mismo.
-        </span>
-      </div>
-
-      {frontera.length > 1 ? (
-        <FronteraCalidadCosto variantes={frontera} tarjetas={tarjetas} />
+      {tarjetas.length < 3 ? (
+        <p className="font-mono text-[11.5px] leading-[1.6] text-muted-foreground">
+          {es.portada.faltanRespuestas}
+        </p>
       ) : null}
-    </div>
+
+      <FronteraCalidadCosto
+        variantes={frontera}
+        tarjetas={tarjetas}
+        techo={techo}
+        enFrontera={sinFiltrar.totales.enFrontera}
+      />
+
+      <p className="font-mono text-[11.5px] leading-[1.6] text-muted-foreground">
+        {fuentes.join(" · ")} ·{" "}
+        {usandoSemilla
+          ? `instantánea del ${fechaDeLaSemilla}`
+          : (hace(datos.actualizado) ?? es.estado.sinCorridas)}
+      </p>
+    </>
   );
 }
 
-function EsqueletoFiltros() {
-  return <Skeleton className="h-44 w-full rounded-xl" />;
-}
-
-function EsqueletoTarjetas() {
+function Esqueleto() {
   return (
-    <div className="grid gap-5 lg:grid-cols-3">
-      {[0, 1, 2].map((i) => (
-        <Skeleton key={i} className="h-[26rem] w-full rounded-xl" />
-      ))}
+    <div className="flex flex-col gap-[30px]">
+      <Skeleton className="h-[18rem] w-full rounded-[10px]" />
+      <Skeleton className="h-[196px] w-full rounded-[10px]" />
     </div>
   );
 }

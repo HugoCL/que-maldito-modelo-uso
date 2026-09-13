@@ -3,7 +3,7 @@
  *
  * El resolvedor automático cubre la mayoría: normaliza, prueba quitando el
  * prefijo del fabricante y prueba por sufijo. Aquí solo van los casos donde el
- * nombre comercial y el id técnico no se parecen lo suficiente — que es lo
+ * nombre comercial y el id técnico no se parecen lo suficiente, que es lo
  * normal cuando un benchmark escribe "Fable 5.1" y el catálogo dice
  * "claude-fable-5-1", o cuando dos fabricantes usan la misma palabra.
  *
@@ -24,12 +24,6 @@ export const MODEL_ALIASES: Record<string, string> = {
   "sonnet-4-5": "claude-sonnet-4-5",
   "haiku-4-5": "claude-haiku-4-5",
 
-  // SWE-bench y SWE-rebench invierten familia y número.
-  "claude-4-5-opus": "claude-opus-4-5",
-  "claude-4-5-sonnet": "claude-sonnet-4-5",
-  "claude-4-opus": "claude-opus-4",
-  "claude-4-sonnet": "claude-sonnet-4",
-  "claude-3-7-sonnet": "claude-3-7-sonnet",
 };
 
 /** Fabricantes cuyo prefijo se puede quitar sin perder identidad. */

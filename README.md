@@ -9,9 +9,13 @@ Tres respuestas a "¿qué modelo uso para programar?", actualizadas solas cada d
 | **Necesito uno bueno** | la tarea es difícil y el presupuesto da igual |
 
 La unidad que se recomienda no es el modelo sino el **modelo a un nivel de reasoning effort**.
-En CursorBench, Fable 5.1 en `low` saca 45.1% a $5.44 por tarea y en `max` saca 51.8% a $17.28:
-6.7 puntos por 3.2 veces el precio. Tratarlos como el mismo modelo esconde justo la decisión que
-más dinero mueve.
+El mismo modelo en `low` y en `max` no cuesta ni rinde lo mismo, y la diferencia de precio suele
+ser de varias veces por unos pocos puntos. Tratarlos como el mismo modelo esconde justo la
+decisión que más dinero mueve.
+
+El ejemplo concreto no está escrito aquí a propósito: [/metodologia](app/metodologia/page.tsx) lo
+calcula del conjunto de hoy y enseña el peor salto que haya ahora mismo. Un número pegado en un
+README es verdad el día que se escribe.
 
 ## Puesta en marcha
 
@@ -31,7 +35,7 @@ pnpm dev
 ```
 
 **Sin Convex también arranca.** Si `NEXT_PUBLIC_CONVEX_URL` no está definida, la web usa la
-instantánea de `lib/datos-semilla.ts` y lo dice en pantalla — unos datos de hace semanas
+instantánea de `lib/datos-semilla.ts` y lo dice en pantalla. Unos datos de hace semanas
 presentados como frescos serían peor que no tener web.
 
 La primera corrida del pipeline se lanza a mano:
@@ -52,14 +56,31 @@ Ninguna medición es nuestra. El pipeline cruza el trabajo de otros y enlaza sie
 | [DeepSWE v1.1](https://deepswe.datacurve.ai/) | `pass@1` con intervalos de confianza sobre 4 corridas, y costo real por tarea |
 | [CursorBench 4.0](https://cursor.com/cursorbench) | tareas multi-archivo de sesiones reales, con costo por tarea y por effort |
 | [Terminal-Bench 2.0](https://www.tbench.ai/) | trabajo agéntico de terminal de punta a punta |
-| [SWE-rebench](https://swe-rebench.com/) | tareas nuevas cada mes: resiste contaminación |
-| [SWE-bench Verified](https://www.swebench.com/) | el clásico; pesa poco y decae por antigüedad |
 | [OpenRouter](https://openrouter.ai) | disponibilidad y uso real en programación |
+
+Para entrar, un benchmark tiene que medir modelos que alguien pueda usar hoy y solaparse con
+los demás: si ninguna de sus variantes aparece también en otra fuente, ninguna llega a los dos
+benchmarks que hacen falta para ser una respuesta, y la fuente entera no cambia nada.
 
 **Artificial Analysis está integrada pero apagada.** Los términos de su API gratuita dicen
 *internal use only; no redistribution*, y publicar sus índices en un sitio público es
 redistribuir. El adapter está escrito en `convex/sources/artificialAnalysis.ts` con
 `enabled: false`; se enciende el día que haya licencia comercial o permiso escrito.
+
+## Los pesos y los perfiles
+
+**Todos los benchmarks que entran pesan lo mismo.** Nadie sabe si CursorBench vale exactamente
+1.2 veces lo que vale DeepSWE, y un número con dos decimales parece medido aunque esté inventado.
+Un reparto así decide quién sale recomendado sin que haya forma de defenderlo.
+
+Lo único que se decide es **cuáles entran**, y eso es lo que hace un perfil: `agentico` mira
+Terminal-Bench y DeepSWE, `mantenimiento` mira CursorBench y DeepSWE. Esa pregunta, la de si
+Terminal-Bench mide el trabajo de arreglar bugs, sí se puede contestar. Está en
+[`convex/scoring/config.ts`](convex/scoring/config.ts).
+
+Para poder ser una respuesta hacen falta **dos benchmarks distintos**. Se cuentan fuentes y no
+fracciones de peso: con los pesos iguales, "la mitad de los pesos" sería *un solo* benchmark en un
+perfil que mira dos, justo lo que esa regla existe para impedir.
 
 ## Cómo está montado
 
@@ -69,8 +90,9 @@ convex/
                  y una línea en registry.ts
   matching/      de "Fable 5.1 Max" al modelo del catálogo. Lo que no resuelve
                  cae en unresolvedKeys con su sugerencia; nunca se adivina
-  scoring/       config.ts (los pesos), compute.ts (calidad y costo),
-                 tiers.ts (frontera, codo, las tres reglas)
+  scoring/       config.ts (qué benchmarks entran y en qué perfil),
+                 compute.ts (calidad y costo), tiers.ts (frontier, codo,
+                 las tres reglas)
   ingest/        orquestador, snapshots con hash, bitácora de corridas
   public/        las consultas que lee la web
 app/, components/, lib/   Next.js App Router + shadcn/ui, copy en lib/i18n/es.ts
@@ -81,7 +103,7 @@ Las observaciones se guardan en formato largo (`sourceId`, `variante`, `métrica
 que **cambiar la metodología nunca requiere volver a descargar nada**: se recalcula sobre lo que
 ya hay.
 
-La metodología completa está en [/metodologia](app/metodologia/page.tsx) y los pesos en
+La metodología completa está en [/metodologia](app/metodologia/page.tsx) y los perfiles en
 [`convex/scoring/config.ts`](convex/scoring/config.ts). Si una recomendación sorprende, ahí es
 donde hay que discutir.
 
@@ -91,10 +113,10 @@ donde hay que discutir.
 pnpm test
 ```
 
-69 tests contra fixtures reales capturados de cada fuente (`tests/fixtures/`). Cubren los siete
+59 tests contra fixtures reales capturados de cada fuente (`tests/fixtures/`). Cubren los
 parsers, la resolución de nombres y las propiedades del scoring: que nunca se recomiende una
-variante dominada, que el orden de las tarjetas sea siempre coherente, y que dos modelos con
-intervalos solapados se desempaten por costo.
+variante dominada, que las tres respuestas sean siempre tres modelos distintos y en orden de
+precio, y que dos modelos con intervalos solapados se desempaten por costo.
 
 Un cambio de maquetación río arriba rompe un test, no la producción.
 
@@ -103,7 +125,7 @@ npx vite-node scripts/preview-recomendaciones.ts
 ```
 
 Corre el pipeline entero sobre los fixtures e imprime las tres tarjetas en la terminal. Acepta un
-perfil: `mantenimiento`, `agentico`, `greenfield`.
+perfil: `general`, `mantenimiento`, `agentico`.
 
 ```bash
 npx vite-node scripts/diagnose-matching.ts

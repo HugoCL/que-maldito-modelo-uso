@@ -45,7 +45,7 @@ export function normalizeEffort(raw: string | undefined | null): Effort {
 export function splitEffort(name: string): { base: string; effort: Effort } {
   let cleaned = name.trim().replace(/\s+/g, " ");
 
-  // SWE-rebench escribe "DeepSeek-V4 Pro [high]" y "Claude Opus 4.8-xhigh".
+  // Los tableros escriben "DeepSeek-V4 Pro [high]" y "Claude Opus 4.8-xhigh".
   const bracket = cleaned.match(/^(.*?)\s*\[([^\]]+)\]$/);
   if (bracket) {
     const effort = EFFORT_ALIASES[slugify(bracket[2])];

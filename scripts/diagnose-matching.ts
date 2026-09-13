@@ -9,8 +9,6 @@ import { parse as modelsDev } from "../convex/sources/modelsDev";
 import { parse as cursorBench } from "../convex/sources/cursorBench";
 import { parse as deepSwe } from "../convex/sources/deepSwe";
 import { parse as terminalBench } from "../convex/sources/terminalBench";
-import { parse as sweRebench } from "../convex/sources/sweRebench";
-import { parse as sweBenchVerified } from "../convex/sources/sweBenchVerified";
 import { buildIndex, resolveModel } from "../convex/matching/resolve";
 
 const read = (f: string) => readFileSync(`tests/fixtures/${f}`, "utf8");
@@ -22,8 +20,6 @@ const benches = [
   ["deepswe", deepSwe(read("deepswe.html"))],
   ["cursorbench", cursorBench(read("cursorbench.html"))],
   ["terminalbench", terminalBench(read("terminalbench.html"))],
-  ["swerebench", sweRebench(read("swerebench.html"))],
-  ["swebench-verified", sweBenchVerified(read("swebench.json"))],
 ] as const;
 
 console.log(`catálogo: ${catalog.length} modelos\n`);

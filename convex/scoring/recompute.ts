@@ -1,5 +1,6 @@
 import { internalMutation } from "../_generated/server";
 import type { QueryCtx } from "../_generated/server";
+import type { Id } from "../_generated/dataModel";
 import type { Candidate } from "./compute";
 import { scoreAll } from "./compute";
 import { elegirTarjetas } from "./tiers";
@@ -114,7 +115,9 @@ export const recalcular = internalMutation({
       await ctx.db.insert("rankings", {
         tier: t.tier,
         variantId,
-        runnerUpVariantId: t.segundo ? idPorClave.get(t.segundo.variantKey) : undefined,
+        alternativeVariantIds: t.alternativas
+          .map((a) => idPorClave.get(a.variantKey))
+          .filter((id): id is Id<"variants"> => id !== undefined),
         quality: t.ganador.quality,
         cost: t.ganador.cost,
         costMeasured: t.ganador.costMeasured,
