@@ -46,6 +46,35 @@ npx convex run ingest/orchestrator:runAll '{"trigger":"manual"}'
 
 Después el cron de `convex/crons.ts` lo repite cada día a las 06:00 UTC.
 
+## Despliegue
+
+La web en Vercel, el backend en Convex, y un solo build para los dos:
+
+```bash
+npx convex deploy --cmd 'pnpm build'
+```
+
+Está en [`vercel.json`](vercel.json). Despliega primero las funciones de Convex
+y solo entonces construye la web, con `NEXT_PUBLIC_CONVEX_URL` ya apuntando al
+despliegue de producción. Así la web nunca sale con un backend más viejo que
+ella.
+
+En Vercel hace falta una variable, `CONVEX_DEPLOY_KEY`, que es una *production
+deploy key* del proyecto de Convex (Dashboard, Settings, Deploy keys). Sin ella
+el build falla a propósito en vez de publicar una web sin datos.
+
+La primera corrida del pipeline en producción se lanza a mano; después la coge
+el cron:
+
+```bash
+npx convex run --prod 'ingest/orchestrator:runAll' '{"trigger":"manual"}'
+```
+
+Ninguna página se prerenderiza ([`app/layout.tsx`](app/layout.tsx) fuerza el
+renderizado dinámico). Todo lo que se ve sale de una consulta a Convex que no se
+cachea, así que prerenderizar cualquier página la dejaría congelada con los
+datos del build, que es justo lo que este sitio promete no hacer.
+
 ## Fuentes
 
 Ninguna medición es nuestra. El pipeline cruza el trabajo de otros y enlaza siempre al original.
