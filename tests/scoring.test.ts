@@ -15,6 +15,7 @@ import {
   type Candidate,
   type Scored,
 } from "../convex/scoring/compute";
+import { THRESHOLDS, minimoDeBenchmarks } from "../convex/scoring/config";
 import {
   codoDeLaFrontera,
   elegibles,
@@ -36,7 +37,7 @@ const { candidates } = buildCandidates(catalog, [
 
 // Fecha fija: si no, los tests de decaimiento cambian de resultado cada día.
 const AHORA = Date.parse("2026-09-11T00:00:00Z");
-const scored = scoreAll(candidates, "general", AHORA);
+const scored = scoreAll(candidates, AHORA);
 const pool = elegibles(scored);
 const frontier = paretoFrontier(pool);
 const tarjetas = elegirTarjetas(scored);
@@ -225,37 +226,75 @@ test("el codo se mide contra la frontera entera aunque se elija en un subconjunt
   assert.equal(elegido, pts[2]);
 });
 
-// ─── perfiles ─────────────────────────────────────────────────────────────
+// ─── orden de las tarjetas ────────────────────────────────────────────────
 
-test("cambiar de perfil cambia las respuestas", () => {
-  const agentico = elegirTarjetas(scoreAll(candidates, "agentico", AHORA));
-  const mantenimiento = elegirTarjetas(scoreAll(candidates, "mantenimiento", AHORA));
-  for (const conjunto of [agentico, mantenimiento]) {
-    // Un perfil puede quedarse en dos respuestas cuando no hay datos para tres,
-    // que es lo que pasa con el trabajo agéntico porque casi nadie lo mide. Una
-    // sola respuesta ya no es una recomendación, es una lista.
-    assert.ok(conjunto.length >= 2, "un perfil con menos de dos respuestas no sirve");
-    assert.equal(new Set(conjunto.map((t) => t.ganador.variantKey)).size, conjunto.length);
-  }
-  assert.notDeepEqual(
-    agentico.map((t) => t.ganador.variantKey),
-    mantenimiento.map((t) => t.ganador.variantKey),
-  );
+test("las tres tarjetas salen en orden de calidad y de precio", () => {
+  const t = elegirTarjetas(scoreAll(candidates, AHORA));
+  const de = (tier: string) => t.find((x) => x.tier === tier)?.ganador;
+  const barato = de("barato");
+  const dia = de("dia_a_dia");
+  const bueno = de("bueno");
+
+  assert.ok(t.length >= 2, "menos de dos respuestas ya no es una recomendación");
+  assert.equal(new Set(t.map((x) => x.ganador.variantKey)).size, t.length);
+
+  if (bueno && dia) assert.ok(bueno.quality >= dia.quality, "bueno < día a día");
+  if (barato && dia) assert.ok(barato.cost! <= dia.cost!, "barato > día a día");
+  if (dia && bueno) assert.ok(dia.cost! <= bueno.cost!, "día a día > bueno");
+  if (barato && bueno) assert.ok(barato.cost! <= bueno.cost!, "barato > bueno");
 });
 
-test("todos los perfiles siguen respetando el orden de las tarjetas", () => {
-  for (const perfil of ["general", "mantenimiento", "agentico"] as const) {
-    const t = elegirTarjetas(scoreAll(candidates, perfil, AHORA));
-    const de = (tier: string) => t.find((x) => x.tier === tier)?.ganador;
-    const barato = de("barato");
-    const dia = de("dia_a_dia");
-    const bueno = de("bueno");
+// ─── el mínimo de benchmarks ──────────────────────────────────────────────
 
-    if (bueno && dia) assert.ok(bueno.quality >= dia.quality, `${perfil}: bueno < día a día`);
-    if (barato && dia) assert.ok(barato.cost! <= dia.cost!, `${perfil}: barato > día a día`);
-    if (dia && bueno) assert.ok(dia.cost! <= bueno.cost!, `${perfil}: día a día > bueno`);
-    if (barato && bueno) assert.ok(barato.cost! <= bueno.cost!, `${perfil}: barato > bueno`);
+test("bajar el mínimo a uno solo añade, nunca quita", () => {
+  const conUno = elegibles(scored, 1);
+  const claves = new Set(conUno.map((s) => s.variantKey));
+
+  assert.ok(conUno.length > pool.length, "con el mínimo en uno debería entrar más gente");
+  for (const s of pool) {
+    assert.ok(claves.has(s.variantKey), `${s.variantKey} desapareció al bajar el mínimo`);
   }
+  // Lo que entra es justo lo medido una sola vez, y entra marcado.
+  for (const s of conUno) {
+    if (!pool.some((p) => p.variantKey === s.variantKey)) {
+      assert.equal(s.benchmarks, 1);
+      assert.equal(s.confidence, "baja");
+    }
+  }
+});
+
+/**
+ * Bajar el mínimo no garantiza tres respuestas, y no debe: los medidos una
+ * sola vez entran baratos y con la nota de su único benchmark, así que pueden
+ * aplastar la frontera y dejar el tramo del día a día vacío. Lo que sí tiene
+ * que cumplirse es que nada salga sin marcar.
+ */
+test("con el mínimo en uno las respuestas siguen siendo coherentes y marcadas", () => {
+  const conUno = elegirTarjetas(scored, 1);
+  const tiers = conUno.map((t) => t.tier);
+
+  assert.deepEqual(tiers, ["barato", "dia_a_dia", "bueno"].filter((x) => tiers.includes(x as never)));
+  assert.equal(new Set(conUno.map((t) => t.ganador.variantKey)).size, conUno.length);
+
+  for (const r of conUno) {
+    for (const v of [r.ganador, ...r.alternativas]) {
+      assert.ok(v.benchmarks >= 1);
+      if (v.benchmarks < THRESHOLDS.benchmarksMinimos) {
+        assert.equal(v.confidence, "baja", `${v.variantKey} debería ir marcada`);
+      }
+    }
+  }
+});
+
+test("un mínimo raro en la URL cae en el de la metodología", () => {
+  assert.equal(minimoDeBenchmarks(undefined), THRESHOLDS.benchmarksMinimos);
+  assert.equal(minimoDeBenchmarks(1), 1);
+  // Ni cero, ni negativo, ni por encima del umbral: nadie endurece ni desactiva
+  // la regla desde la barra de direcciones.
+  assert.equal(minimoDeBenchmarks(0), THRESHOLDS.benchmarksMinimos);
+  assert.equal(minimoDeBenchmarks(-3), THRESHOLDS.benchmarksMinimos);
+  assert.equal(minimoDeBenchmarks(99), THRESHOLDS.benchmarksMinimos);
+  assert.equal(minimoDeBenchmarks(NaN), THRESHOLDS.benchmarksMinimos);
 });
 
 // ─── casos límite ─────────────────────────────────────────────────────────
@@ -279,7 +318,7 @@ test("un solo candidato no rompe nada", () => {
     costSamples: [{ sourceId: "deepswe", costPerTask: 1 }],
     providers: [],
   };
-  const t = elegirTarjetas(scoreAll([uno], "general", AHORA));
+  const t = elegirTarjetas(scoreAll([uno], AHORA));
   assert.ok(t.length >= 1);
   assert.ok(t.every((x) => x.ganador.variantKey === "x@default"));
 });

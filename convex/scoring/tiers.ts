@@ -51,11 +51,17 @@ export const MAX_ALTERNATIVAS = 3;
  * uno solo, el que mejor le venga, sale con calidad 100 y se cuela por delante
  * de otro medido por tres. Los que no llegan siguen visibles en su ficha, con
  * su etiqueta de confianza baja; lo que no hacen es ser la respuesta.
+ *
+ * `minimo` existe porque la web deja bajarlo a uno a propósito, para ver el
+ * conjunto entero. Es lo único que abre la puerta a los 39 que hoy se quedan
+ * fuera: elegir qué benchmarks cuentan no puede, porque apagar una fuente solo
+ * puede bajarle la cuenta a una variante y nunca subírsela.
  */
-export function elegibles<T extends Elegible>(scored: T[]): T[] {
-  return scored.filter(
-    (s) => s.cost !== undefined && s.benchmarks >= THRESHOLDS.benchmarksMinimos,
-  );
+export function elegibles<T extends Elegible>(
+  scored: T[],
+  minimo: number = THRESHOLDS.benchmarksMinimos,
+): T[] {
+  return scored.filter((s) => s.cost !== undefined && s.benchmarks >= minimo);
 }
 
 /**
@@ -233,8 +239,11 @@ function razonCortaBueno(g: Elegible, lider: Elegible): string {
  * calidad definidos en config.ts. Si el resultado sorprende, lo que hay que
  * discutir son los pesos, no el código.
  */
-export function elegirTarjetas<T extends Elegible>(scored: T[]): Recomendacion<T>[] {
-  const pool = elegibles(scored);
+export function elegirTarjetas<T extends Elegible>(
+  scored: T[],
+  minimo: number = THRESHOLDS.benchmarksMinimos,
+): Recomendacion<T>[] {
+  const pool = elegibles(scored, minimo);
   if (pool.length === 0) return [];
 
   const frontier = paretoFrontier(pool);

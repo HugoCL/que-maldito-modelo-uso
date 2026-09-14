@@ -143,12 +143,10 @@ export const runAll = internalAction({
             observaciones: resueltas,
           });
           sinResolver = perdidas.size;
-          if (perdidas.size) {
-            await ctx.runMutation(internal.ingest.store.registrarSinResolver, {
-              sourceId: source.id,
-              claves: [...perdidas.values()],
-            });
-          }
+          await ctx.runMutation(internal.ingest.store.registrarSinResolver, {
+            sourceId: source.id,
+            claves: [...perdidas.values()],
+          });
         }
 
         await ctx.runMutation(internal.ingest.snapshot.marcarFuente, {

@@ -36,7 +36,7 @@ test("los niveles de effort declarados se conservan", () => {
   assert.deepEqual(m.supportedEfforts, ["low", "medium", "high", "max"]);
 });
 
-test("hay modelos de pesos abiertos y de pesos cerrados", () => {
+test("hay modelos open weight y de pesos cerrados", () => {
   assert.ok(entries.some((e) => e.openWeights === true));
   assert.ok(entries.some((e) => e.openWeights === false));
 });

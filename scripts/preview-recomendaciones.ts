@@ -3,7 +3,7 @@
  * Es la prueba de olfato: si una recomendación se ve absurda, el problema
  * está en convex/scoring/config.ts.
  *
- *   npx vite-node scripts/preview-recomendaciones.ts [perfil]
+ *   npx vite-node scripts/preview-recomendaciones.ts
  */
 import { readFileSync } from "node:fs";
 import { parse as modelsDev } from "../convex/sources/modelsDev";
@@ -14,10 +14,8 @@ import { parse as terminalBench } from "../convex/sources/terminalBench";
 import { buildCandidates } from "../convex/scoring/candidates";
 import { scoreAll } from "../convex/scoring/compute";
 import { elegibles, elegirTarjetas, paretoFrontier } from "../convex/scoring/tiers";
-import type { PerfilId } from "../convex/scoring/config";
 
 const read = (f: string) => readFileSync(`tests/fixtures/${f}`, "utf8");
-const perfil = (process.argv[2] ?? "general") as PerfilId;
 
 const catalog = modelsDev(read("modelsdev.json"));
 const rank = new Map(
@@ -31,11 +29,10 @@ const { candidates, unresolved } = buildCandidates(catalog, [
   { sourceId: "terminalbench", observations: terminalBench(read("terminalbench.html")) },
 ]);
 
-const scored = scoreAll(candidates, perfil);
+const scored = scoreAll(candidates);
 const pool = elegibles(scored);
 const frontier = new Set(paretoFrontier(pool));
 
-console.log(`perfil: ${perfil}`);
 console.log(`candidatos: ${candidates.length}   elegibles (cobertura suficiente): ${pool.length}   sin resolver: ${unresolved.length}`);
 console.log(`en la frontera de Pareto: ${frontier.size}\n`);
 

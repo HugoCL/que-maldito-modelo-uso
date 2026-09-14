@@ -226,23 +226,24 @@
 }
 
 /**
- * La explicación de cada filtro, al pasar por encima. Ver
- * components/barra-de-filtros.tsx.
+ * La explicación de una opción, al pasar por encima. Cuelga del grupo o de la
+ * pastilla. Ver components/barra-de-filtros.tsx.
  *
- * Cuelga de su propia pastilla, que es lo que hace que se entienda de cuál
- * habla.
- *
- * Escondida está en `display: none` y no solo transparente: una caja de 260px
- * colgando de la pastilla del medio ensancha la página aunque no se vea.
+ * Escondida está en `display: none` y no solo transparente: una caja de 280px
+ * colgando de una pastilla ensancha la página aunque no se vea.
  *
  * Y solo aparece donde hay puntero y sitio. En una pantalla táctil no hay hover
- * que la enseñe, y por debajo de 560px una caja de este ancho colgando de la
- * última pastilla se saldría de la ventana. Ahí queda la línea de debajo de la
- * barra, que dice lo mismo del perfil que esté puesto.
+ * que la enseñe, y por debajo de 560px una caja de este ancho se saldría de la
+ * ventana. Para esos casos está la línea de debajo de la barra, que dice con
+ * qué se está puntuando, y /metodologia, que explica el porqué entero.
  */
 .opcion {
   position: relative;
   display: inline-flex;
+}
+
+.grupo-con-ayuda {
+  position: relative;
 }
 
 .ayuda {
@@ -252,9 +253,9 @@
   z-index: 10;
   display: none;
   width: max-content;
-  max-width: min(260px, calc(100vw - 2.5rem));
+  max-width: min(280px, calc(100vw - 2.5rem));
   margin-top: 7px;
-  padding: 7px 10px;
+  padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 9px;
   background: var(--popover);
@@ -262,17 +263,40 @@
   color: var(--popover-foreground);
   font-size: 12px;
   line-height: 1.45;
+  text-align: left;
   pointer-events: none;
 }
 
-.opcion:last-child .ayuda {
+.opcion:last-child .ayuda,
+[role="group"]:last-child .ayuda {
   right: 0;
   left: auto;
 }
 
 @media (hover: hover) and (min-width: 560px) {
   .opcion:hover .ayuda,
-  .opcion:focus-within .ayuda {
+  .opcion:focus-within .ayuda,
+  .grupo-con-ayuda:hover > .ayuda,
+  .grupo-con-ayuda:focus-within > .ayuda {
     display: block;
   }
+}
+
+/*
+ * Recharts 3 envuelve cada capa de pintado en un `<g tabindex="-1">`. Al tocar
+ * el gráfico el navegador enfoca esa capa y le dibuja su anillo de foco por
+ * fuera, que al ser una capa entera sale como un recuadro vacío alrededor de
+ * todos los puntos y se lee como un error de dibujo.
+ *
+ * Quitarlo no le quita nada a nadie: con `tabindex="-1"` a esos grupos no se
+ * llega con el teclado, así que ese anillo no está señalando dónde está el
+ * cursor de nadie. Los focos de verdad, los de los enlaces y las pastillas de
+ * los filtros, no los toca esto.
+ *
+ * shadcn ya trae `[&_.recharts-layer]:outline-hidden` para este mismo problema,
+ * pero estos grupos se llaman `recharts-zIndex-layer_N` y ese selector no los
+ * alcanza.
+ */
+.recharts-wrapper g[tabindex="-1"]:focus {
+  outline: none;
 }

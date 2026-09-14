@@ -22,9 +22,11 @@ const fecha = (ts: number) =>
 export default async function Estado() {
   const [{ fuentes }, estado] = await Promise.all([obtenerMetodologia(), obtenerEstado()]);
 
+  const visibles = fuentes.filter((f) => f.activa);
   const corrida = estado?.ultimaCorrida ?? null;
   const enMarcha = corrida !== null && corrida.finishedAt === undefined;
-  const leidas = corrida?.results.length ?? 0;
+  const leidas =
+    corrida?.results.filter((r) => visibles.some((f) => f.id === r.sourceId)).length ?? 0;
 
   return (
     <main className="mx-auto flex w-full max-w-[620px] flex-col gap-[22px] px-5 py-10 sm:px-[30px]">
@@ -45,7 +47,7 @@ export default async function Estado() {
           <span className="size-[9px] shrink-0 rounded-full bg-primary" />
           <div className="flex flex-col gap-0.5">
             <span className="text-[13.5px] leading-[1.3] font-medium">
-              Actualizando ahora: {leidas} de {fuentes.length} fuentes leídas
+              Actualizando ahora: {leidas} de {visibles.length} fuentes leídas
             </span>
             <span className="font-mono text-xs leading-[1.3] text-muted-foreground">
               empezó {hace(corrida.startedAt)}
@@ -55,7 +57,7 @@ export default async function Estado() {
       ) : null}
 
       <div className="flex flex-col overflow-hidden rounded-[10px] border">
-        {fuentes.map((f) => (
+        {visibles.map((f) => (
           <FilaDeFuente
             key={f.id}
             fuente={f}
@@ -67,13 +69,14 @@ export default async function Estado() {
       </div>
 
       {estado?.sinResolver.length ? (
-        <div className="flex flex-col gap-1.5 rounded-[10px] border border-dashed px-4 py-3.5">
-          <span className="text-[12.5px] leading-[1.3] font-medium">
-            {estado.sinResolver.length} {es.estado.sinResolver.toLowerCase()} en esta corrida
-          </span>
-          <span className="font-mono text-[11.5px] leading-[1.6] text-muted-foreground">
-            {estado.sinResolver.slice(0, 8).map((u) => `«${u.sourceKey}»`).join(" · ")}
-          </span>
+        <div className="flex flex-col gap-2 rounded-[10px] border border-dashed px-4 py-3.5">
+          <p className="text-pretty text-sm leading-[1.55]">{es.estado.sinResolver}</p>
+          <p className="font-mono text-[11px] leading-[1.65] text-muted-foreground">
+            {estado.sinResolver.slice(0, 4).map((u) => u.sourceKey).join(" · ")}
+            {estado.sinResolver.length > 4
+              ? ` · ${es.estado.sinResolverMas(estado.sinResolver.length - 4)}`
+              : ""}
+          </p>
         </div>
       ) : null}
     </main>

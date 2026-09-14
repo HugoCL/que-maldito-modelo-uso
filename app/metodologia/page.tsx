@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { obtenerMetodologia, obtenerVariantes } from "@/lib/datos";
+import { es } from "@/lib/i18n/es";
 import type { MetricaDeVariante, Variante } from "@/lib/types";
 
 export const metadata = { title: "Metodología" };
@@ -15,13 +17,16 @@ const pct = (n: number) => `${Math.round(n * 100)}%`;
  * que alguien abre cuando ya desconfía.
  */
 export default async function Metodologia() {
-  const [{ metricas, perfiles, umbrales, mezclaDeTokens, fuentes }, variantes] = await Promise.all([
+  const [{ metricas, umbrales, mezclaDeTokens, fuentes }, variantes] = await Promise.all([
     obtenerMetodologia(),
     obtenerVariantes(),
   ]);
 
   const effort = ejemploDeEffort(variantes);
   const banda = ejemploDeBanda(variantes);
+  const sueltas = medidasPorUnaFuente(variantes, umbrales.benchmarksMinimos);
+  const conSesgo = metricas.filter((m) => m.sesgo);
+  const cobertura = coberturaPorBenchmark(variantes);
 
   return (
     <main className="mx-auto flex w-full max-w-[700px] flex-col gap-9 px-5 py-10 sm:px-[30px]">
@@ -74,12 +79,39 @@ export default async function Metodologia() {
             />
           ))}
         </Filas>
+        {conSesgo.length ? (
+          <>
+            <p>
+              Una fuente puede medir bien y aun así no medir a todos. Cuando eso pasa se dice aquí
+              y se puede apagar desde la página principal, que recalcula las tres respuestas sin
+              ella en vez de tacharlas de una lista ya hecha. No es elegir qué benchmark te
+              conviene: es poder ver cuánto de la respuesta lo estaba sosteniendo una fuente con un
+              agujero conocido.
+            </p>
+            {conSesgo.map((m) => (
+              <p key={m.metric} className="text-[13px] leading-[1.55] text-muted-foreground">
+                <strong className="font-medium text-foreground">{m.etiqueta}</strong>: {m.sesgo}
+              </p>
+            ))}
+          </>
+        ) : null}
         <p>
           Solo cuentan los benchmarks que existen para ese modelo, y los pesos se renormalizan. Para
           poder ganar una tarjeta hacen falta al menos{" "}
           <Cifra>{umbrales.benchmarksMinimos}</Cifra> benchmarks distintos: sin esa regla, un modelo
           medido por uno solo, el que mejor le venga, sale con calidad 100 y se cuela por delante de
-          otro medido por tres. Los que no llegan siguen visibles en su ficha.
+          otro medido por tres. Los que no llegan no se borran: tienen su nota, su ficha y{" "}
+          <a href="#una-fuente" className="underline underline-offset-4">
+            su lista aquí abajo
+          </a>
+          .
+        </p>
+        <p>
+          Ese mínimo se puede bajar desde la página principal, en «{es.filtros.minimo}». Bajarlo a{" "}
+          <Cifra>{umbrales.benchmarksMinimosSuelo}</Cifra> no cambia las notas: cambia quién puede
+          ser respuesta. Entran los medidos una sola vez, marcados como confianza baja. Se queda en{" "}
+          <Cifra>{umbrales.benchmarksMinimos}</Cifra> porque si no, los baratos de un solo benchmark
+          se comen el medio y el día a día se queda sin candidatos.
         </p>
       </Seccion>
 
@@ -107,7 +139,7 @@ export default async function Metodologia() {
           cuando hay más de uno mostramos el rango.
         </p>
         <p>
-          No todo &ldquo;$ por tarea&rdquo; es comparable: hace falta que el andamio sea el mismo y
+          No todo &ldquo;$ por tarea&rdquo; es comparable: hace falta que el harness sea el mismo y
           que las tareas se parezcan. Un costo reportado por cada equipo con su propio montaje
           sobre tareas más fáciles hace aparecer modelos &ldquo;de siete centavos&rdquo; que no lo
           son, así que no entra en el eje de costo aunque lo guardemos.
@@ -126,7 +158,7 @@ export default async function Metodologia() {
       <Seccion titulo="Las tres reglas">
         <p>
           Primero se descarta lo dominado: si otro modelo es mejor <em>y</em> más barato, ninguna
-          respuesta puede ser este. Lo que queda es la frontier, donde cada paso es un intercambio
+          respuesta puede ser este. Lo que queda es el frontier, donde cada paso es un intercambio
           real.
         </p>
         <ul className="flex list-disc flex-col gap-2 pl-5">
@@ -138,11 +170,10 @@ export default async function Metodologia() {
             ahorra en tokens.
           </li>
           <li>
-            <strong>Día a día</strong>: el codo de la frontier. Se traza la cuerda entre el extremo
-            barato y el mejor, con el costo en escala logarítmica porque la diferencia entre $1 y
-            $2 se siente como la de $8 a $16, y gana el punto que más se despega hacia arriba de esa
-            recta, sin bajar del <Cifra>{pct(umbrales.pisoCalidadDiaADia)}</Cifra> de la calidad del
-            líder.
+            <strong>Día a día</strong>: se traza una línea entre el extremo barato y el mejor, con el
+            costo en escala logarítmica porque la diferencia entre $1 y $2 se siente como la de $8 a
+            $16, y gana el punto del frontier que más se aleja hacia arriba de esa línea, sin bajar
+            del <Cifra>{pct(umbrales.pisoCalidadDiaADia)}</Cifra> de la calidad del líder.
           </li>
           <li>
             <strong>Necesito uno bueno</strong>: el de más calidad; entre los que empatan dentro del
@@ -156,19 +187,53 @@ export default async function Metodologia() {
         </p>
       </Seccion>
 
-      <Seccion titulo="Perfiles">
-        <p>
-          Cambiar el tipo de tarea no reordena pesos: cambia <strong>qué benchmarks cuentan</strong>
-          , y vuelve a correr las tres reglas enteras sobre los mismos datos. Así la pregunta que
-          hay que discutir es una que se puede contestar, como si Terminal-Bench mide el trabajo de
-          arreglar bugs, y no cuánto vale 0.35 frente a 0.30.
-        </p>
-        <Filas>
-          {perfiles.map((p) => (
-            <Fila key={p.id} izquierda={p.etiqueta} derecha={`${p.mide.length}`} nota={p.mide.join(" · ")} />
-          ))}
-        </Filas>
-      </Seccion>
+      {sueltas.length ? (
+        <Seccion titulo="Lo que mide un solo benchmark" id="una-fuente">
+          <p>
+            Estas <Cifra>{sueltas.reduce((n, m) => n + m.variantes, 0)}</Cifra> variantes, de{" "}
+            <Cifra>{sueltas.length}</Cifra> modelos, tienen nota pero no compiten por las tres
+            respuestas: solo las ha medido un benchmark. No es un juicio sobre el modelo, es una
+            cuenta de cuánta evidencia hay.{" "}
+            <Link href="/?minimo=1" className="underline underline-offset-4">
+              Aquí están compitiendo
+            </Link>
+            , por si prefieres verlo así.
+          </p>
+          <Filas>
+            {sueltas.map((m) => (
+              <Fila
+                key={m.nombre}
+                izquierda={m.nombre}
+                derecha={m.variantes === 1 ? "1 variante" : `${m.variantes} variantes`}
+                nota={[...m.benchmarks, m.abierto ? es.filtros.openWeight : null]
+                  .filter(Boolean)
+                  .join(" · ")}
+              />
+            ))}
+          </Filas>
+          <p>
+            El sesgo salta a la vista al contar cuántos modelos mide cada benchmark y cuántos de
+            ellos son open weight. Mientras esto siga así, casi todo lo abierto se queda en
+            esta lista por falta de una segunda fuente, no por rendir peor.
+          </p>
+          <Filas>
+            {cobertura.map((c) => (
+              <Fila
+                key={c.etiqueta}
+                izquierda={c.etiqueta}
+                derecha={`${c.modelos} modelos`}
+                nota={
+                  c.abiertos === 0
+                    ? es.filtros.openWeightNinguno
+                    : c.abiertos === 1
+                      ? es.filtros.openWeightUno
+                      : es.filtros.openWeightN(c.abiertos)
+                }
+              />
+            ))}
+          </Filas>
+        </Seccion>
+      ) : null}
 
       <Seccion titulo="Lo que esto no es">
         <p>
@@ -177,7 +242,7 @@ export default async function Metodologia() {
           aparecer, porque hasta que alguien lo mide no tenemos nada que decir de él.
         </p>
         <p className="font-mono text-[11.5px] text-muted-foreground">
-          {fuentes.filter((f) => f.activa).length} de {fuentes.length} fuentes activas ·{" "}
+          {fuentes.filter((f) => f.activa).length} fuentes activas ·{" "}
           {variantes.length} variantes puntuadas
         </p>
       </Seccion>
@@ -255,9 +320,78 @@ function ejemploDeBanda(variantes: Variante[]): Variante | undefined {
     .sort((a, b) => b.qualityHi - b.qualityLo - (a.qualityHi - a.qualityLo))[0];
 }
 
-function Seccion({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+/**
+ * Los modelos que un solo benchmark ha medido, agrupados por modelo.
+ *
+ * Se agrupa porque la lista suelta son casi cuarenta filas de la misma media
+ * docena de modelos en distintos niveles de effort, y lo que hay que ver aquí
+ * no es cuántas variantes hay sino qué modelos se quedan fuera y quién los
+ * midió.
+ */
+function medidasPorUnaFuente(variantes: Variante[], minimo: number) {
+  const porModelo = new Map<
+    string,
+    { nombre: string; abierto: boolean; benchmarks: Set<string>; variantes: number; mejor: number }
+  >();
+
+  for (const v of variantes) {
+    if (v.benchmarks === 0 || v.benchmarks >= minimo) continue;
+    const entrada = porModelo.get(v.modelKey) ?? {
+      nombre: v.modelName,
+      abierto: !!v.openWeights,
+      benchmarks: new Set<string>(),
+      variantes: 0,
+      mejor: 0,
+    };
+    for (const m of v.metricas) entrada.benchmarks.add(m.etiqueta);
+    entrada.variantes += 1;
+    entrada.mejor = Math.max(entrada.mejor, v.quality);
+    porModelo.set(v.modelKey, entrada);
+  }
+
+  return [...porModelo.values()].sort((a, b) => b.mejor - a.mejor);
+}
+
+/**
+ * Cuántos modelos mide cada benchmark y cuántos de ellos son open weight.
+ * Sale de los datos de hoy, no de una frase escrita a mano: el día
+ * que CursorBench empiece a medir modelos abiertos, esta tabla lo dice sola.
+ */
+function coberturaPorBenchmark(variantes: Variante[]) {
+  const porBenchmark = new Map<string, { modelos: Set<string>; abiertos: Set<string> }>();
+
+  for (const v of variantes) {
+    for (const m of v.metricas) {
+      const entrada = porBenchmark.get(m.etiqueta) ?? {
+        modelos: new Set<string>(),
+        abiertos: new Set<string>(),
+      };
+      entrada.modelos.add(v.modelKey);
+      if (v.openWeights) entrada.abiertos.add(v.modelKey);
+      porBenchmark.set(m.etiqueta, entrada);
+    }
+  }
+
+  return [...porBenchmark.entries()]
+    .map(([etiqueta, c]) => ({
+      etiqueta,
+      modelos: c.modelos.size,
+      abiertos: c.abiertos.size,
+    }))
+    .sort((a, b) => b.modelos - a.modelos);
+}
+
+function Seccion({
+  titulo,
+  id,
+  children,
+}: {
+  titulo: string;
+  id?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <section className="flex flex-col gap-4 border-t pt-7">
+    <section id={id} className="flex flex-col gap-4 scroll-mt-6 border-t pt-7">
       <h2 className="font-heading text-lg font-semibold">{titulo}</h2>
       <div className="flex flex-col gap-4 text-pretty text-sm leading-[1.65]">{children}</div>
     </section>

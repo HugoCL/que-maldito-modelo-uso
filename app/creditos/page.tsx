@@ -12,7 +12,6 @@ export const metadata = { title: "Créditos" };
 export default async function Creditos() {
   const { fuentes } = await obtenerMetodologia();
   const activas = fuentes.filter((f) => f.activa);
-  const inactivas = fuentes.filter((f) => !f.activa);
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-5 py-12">
@@ -55,41 +54,6 @@ export default async function Creditos() {
           ))}
         </div>
       </section>
-
-      {inactivas.length ? (
-        <section className="flex flex-col gap-4">
-          <h2 className="font-heading text-xl font-semibold">Reconocidas pero no usadas</h2>
-          <p className="text-pretty text-sm text-muted-foreground">
-            Hay trabajo que respetamos y que aun así no aparece en los números. Cuando el motivo es
-            la licencia, lo decimos en vez de estirar la interpretación.
-          </p>
-          <div className="flex flex-col gap-4">
-            {inactivas.map((f) => (
-              <Card key={f.id}>
-                <CardHeader>
-                  <CardTitle className="text-base">
-                    <a
-                      href={f.homepage}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 underline-offset-4 hover:underline"
-                    >
-                      {f.nombre}
-                      <ExternalLinkIcon className="size-3.5" />
-                    </a>
-                  </CardTitle>
-                  <CardDescription>{f.licencia}</CardDescription>
-                </CardHeader>
-                {f.nota ? (
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">{f.nota}</p>
-                  </CardContent>
-                ) : null}
-              </Card>
-            ))}
-          </div>
-        </section>
-      ) : null}
 
       <section className="flex flex-col gap-3 text-sm text-muted-foreground">
         <h2 className="font-heading text-base font-semibold text-foreground">Cómo leemos</h2>

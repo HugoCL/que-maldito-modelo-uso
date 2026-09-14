@@ -7,7 +7,6 @@
  */
 
 export type Tier = "barato" | "dia_a_dia" | "bueno";
-export type PerfilId = "general" | "mantenimiento" | "agentico";
 export type Confianza = "alta" | "media" | "baja";
 
 export type MetricaDeVariante = {
@@ -16,6 +15,11 @@ export type MetricaDeVariante = {
   /** En porcentaje, tal como lo publica el benchmark. */
   valor: number;
   peso: number;
+  /** El mismo resultado reescalado de 0 a 100 contra los extremos del conjunto. */
+  normalizado: number;
+  /** Peor y mejor resultado medidos en este benchmark, en porcentaje. */
+  minimo: number;
+  maximo: number;
 };
 
 export type Variante = {
@@ -53,12 +57,17 @@ export type Tarjeta = {
 };
 
 export type Recomendaciones = {
-  perfil: PerfilId;
-  perfilEtiqueta: string;
   actualizado: number | null;
-  totales: { candidatos: number; elegibles: number; enFrontera: number };
+  totales: {
+    candidatos: number;
+    elegibles: number;
+    enFrontera: number;
+    /** Puntuadas por un solo benchmark: se ven, pero no optan a las tarjetas. */
+    unaFuente: number;
+  };
   tarjetas: Tarjeta[];
-  frontera: Variante[];
+  /** Todo lo que puede optar a una tarjeta, con la frontera marcada. */
+  elegibles: Variante[];
 };
 
 export type Modelo = {
@@ -98,15 +107,19 @@ export type Fuente = {
 export type Metodologia = {
   metricas: Array<{
     metric: string;
+    /** Identificador de la fuente, el que viaja en la URL (`cursorbench`). */
+    fuente: string;
     etiqueta: string;
     peso: number;
     vidaMediaMeses: number | null;
+    /** Defecto de cobertura conocido. Cuando lo hay, la fuente se puede apagar. */
+    sesgo?: string;
   }>;
-  /** `mide` son las etiquetas de los benchmarks que cuentan en ese perfil. */
-  perfiles: Array<{ id: string; etiqueta: string; mide: string[] }>;
   /** Los umbrales que deciden quién puede ser respuesta, tal cual se aplican. */
   umbrales: {
     benchmarksMinimos: number;
+    /** Lo más bajo que la portada deja poner ese mínimo. */
+    benchmarksMinimosSuelo: number;
     pisoCalidadBarato: number;
     pisoCalidadDiaADia: number;
     percentilCostoBarato: number;

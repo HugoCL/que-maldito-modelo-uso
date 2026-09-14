@@ -189,14 +189,21 @@ export const registrarSinResolver = internalMutation({
   },
   handler: async (ctx, { sourceId, claves }) => {
     const ahora = Date.now();
-    for (const c of claves) {
-      const previo = await ctx.db
-        .query("unresolvedKeys")
-        .withIndex("by_source_key", (q) =>
-          q.eq("sourceId", sourceId).eq("sourceKey", c.sourceKey),
-        )
-        .unique();
+    // El conjunto de este parseo sustituye al anterior: si un nombre ahora
+    // sí empató, no puede seguir en /estado como si no puntuara.
+    const previos = await ctx.db
+      .query("unresolvedKeys")
+      .withIndex("by_source_key", (q) => q.eq("sourceId", sourceId))
+      .collect();
+    const porClave = new Map(previos.map((p) => [p.sourceKey, p]));
+    const vigentes = new Set(claves.map((c) => c.sourceKey));
 
+    for (const p of previos) {
+      if (!vigentes.has(p.sourceKey)) await ctx.db.delete(p._id);
+    }
+
+    for (const c of claves) {
+      const previo = porClave.get(c.sourceKey);
       if (previo) {
         await ctx.db.patch(previo._id, {
           lastSeenAt: ahora,

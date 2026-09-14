@@ -14,7 +14,7 @@ export const es = {
     nombreEntero: "Qué maldito modelo uso",
     palabrota: "maldito",
     nombreCorto: "qmmu",
-    lema: "Tres respuestas, actualizadas solas. Sin tablas de cuarenta filas.",
+    lema: "¿Cansado de preguntar o buscar cuál es el mejor modelo? Tres respuestas.",
   },
   nav: {
     inicio: "Inicio",
@@ -65,26 +65,84 @@ export const es = {
       media: "Confianza media",
       baja: "Confianza baja",
     },
+    // La marca que llevan las respuestas que solo existen porque alguien bajó
+    // el mínimo de benchmarks. Va en minúscula y pegada al nombre: quien la ve
+    // está mirando el nombre, no buscando una leyenda.
+    confianzaBaja: "confianza baja",
+    confianzaBajaNota:
+      "Un solo benchmark ha medido esta variante: su nota es esa única medición, sin promedio que la contraste.",
     medidoPor: "Medido por",
     disponibleEn: "Disponible en",
-    pesosAbiertos: "Pesos abiertos",
+    pesosAbiertos: "Open Weight",
+  },
+  // El desglose de la nota, en la ficha del modelo. No es decoración: una nota
+  // de 0 a 100 que nadie puede rehacer a mano es un número pedido de fe, y
+  // este sitio entero va de no pedir fe.
+  desglose: {
+    titulo: "De dónde sale cada nota",
+    media: "media",
+    // Los extremos son del conjunto entero, así que son los mismos para todas
+    // las filas de todos los modelos. Van una vez al final y no repetidos en
+    // cada una, que es lo que hacía que esto no cupiera para cada effort.
+    escala: (etiqueta: string, min: string, max: string) => `${etiqueta}, de ${min} a ${max}`,
+    escalas: (lista: string) => `Las escalas salen de los extremos medidos del conjunto: ${lista}.`,
+    comoSeLee:
+      "Cada benchmark se reescala para que el peor resultado del conjunto sea 0 y el mejor 100, y luego se promedian. Sin reescalar, un benchmark donde todos sacan entre 60 y 70 movería la nota tanto como uno donde van de 5 a 95.",
+    // "Salvo que se baje el mínimo" y no "no puede ser respuesta" a secas: la
+    // portada deja bajarlo, y esta ficha no sabe si se ha bajado. Una frase que
+    // se contradiga con la fila de la que se viene valdría menos que ninguna.
+    unSoloBenchmark:
+      "Con un solo benchmark no hay promedio que hacer: la nota es esa única medición. Por eso una variante así no compite por las tres respuestas, salvo que se baje el mínimo a mano en la portada.",
   },
   filtros: {
     titulo: "¿Para qué lo quieres?",
-    perfil: "Tipo de tarea",
     presupuesto: "Máximo por tarea",
-    // Las dos etiquetas de la portada van en minúscula: la barra de filtros es
-    // una línea, no un formulario.
-    tarea: "tipo de tarea",
+    // Cada grupo es una pregunta, no un verbo suelto: "exige" y "puntúa con"
+    // se leían como una sola frase y no se entendía qué hacía cada pastilla.
     maxPorTarea: "tope por tarea",
+    hasta: (valor: string) => `hasta $${valor}`,
     sinTechoCorto: "sin tope",
-    // Debajo de la barra, en una línea: qué está haciendo cada control ahora
-    // mismo. Los nombres de los benchmarks salen del perfil elegido, así que
+    // El interruptor de una fuente con sesgo de cobertura. El nombre del
+    // benchmark es la etiqueta del grupo; lo que se elige es si cuenta o no.
+    // En positivo: encendida es el estado normal.
+    cuenta: "cuenta",
+    noCuenta: "no cuenta",
+    apagada: (etiqueta: string) => `${etiqueta} no cuenta`,
+    // El mínimo de benchmarks para poder ser respuesta. "Al menos N" y no
+    // "N benchmarks": eso último se lee como cuántos se usan para puntuar,
+    // y aquí se elige el umbral para poder ganar una tarjeta. La cifra sale
+    // del umbral: si mañana la metodología pide tres, la barra lo dice sola.
+    minimo: "para ser respuesta",
+    minimoPastilla: (n: number) =>
+      n === 1 ? "al menos 1 benchmark" : `al menos ${n} benchmarks`,
+    minimoUnoAyuda:
+      "Casi todo lo open weight lo ha medido un solo benchmark. Bajar el mínimo a uno los deja competir, con el precio de que su nota sale de una única medición, la del benchmark que les tocó: entran marcados como confianza baja.",
+    // Debajo de la barra, en una línea: con qué se puntúa y hasta dónde se
+    // gasta. Los nombres de los benchmarks salen de la configuración, así que
     // encender o apagar una fuente cambia esta frase sola.
     puntuaCon: (benchmarks: string) => `Puntúa con ${benchmarks}`,
     conTope: (tope: string) => `nada por encima de $${tope} la tarea`,
+    conUnBenchmark: "basta un benchmark para poder ser respuesta",
     sinTecho: "sin techo",
-    soloOpenWeights: "Solo pesos abiertos",
+    soloOpenWeight: "Solo Open Weight",
+    atajos: "atajos",
+    noPuedoUsar: "filtrar modelos",
+    noPuedoUsarAyuda:
+      "Desmarca los que no puedes usar, o los que no quieres, para sacarlos de las tres respuestas y del gráfico.",
+    aplicarOcultos: "aplicar",
+    todosDelGrupo: "todos",
+    copiarEnlace: "copiar enlace",
+    enlaceCopiado: "copiado",
+    ocultosN: (n: number) => (n === 1 ? "1 oculto" : `${n} ocultos`),
+    mostrarTodos: "mostrar todos",
+    soloGpt: "Solo GPT",
+    soloClaude: "Solo Claude",
+    soloGemini: "Solo Gemini",
+    soloGrok: "Solo Grok",
+    openWeight: "open weight",
+    openWeightNinguno: "ninguno open weight",
+    openWeightUno: "1 open weight",
+    openWeightN: (n: number) => `${n} open weight`,
     proveedor: "Proveedor",
     cualquiera: "Cualquiera",
     limpiar: "Quitar filtros",
@@ -92,19 +150,23 @@ export const es = {
   },
   estado: {
     actualizado: "Actualizado",
-    nunca: "todavía sin corridas",
+    nunca: "todavía sin runs",
     modoSemilla: "Datos de ejemplo",
     modoSemillaDetalle:
       "Sin despliegue de Convex conectado: lo que ves es una instantánea del pipeline del",
     fuentes: "Fuentes",
-    sinResolver: "Nombres sin resolver",
-    corridas: "Últimas corridas",
+    // No es un fallo del run: un benchmark nombró algo que no está en el
+    // catálogo (o no se parece lo bastante) y esa medición no puntúa.
+    sinResolver:
+      "Hay nombres que un benchmark publicó y que no pudimos emparejar con ningún modelo del catálogo: no entran en el ranking.",
+    sinResolverMas: (n: number) => (n === 1 ? "y 1 más" : `y ${n} más`),
+    corridas: "Últimos runs",
     listo: "listo",
     enCurso: "en curso…",
     enCola: "en cola",
     fallo: "falló",
     apagada: "apagada",
-    sinCorridas: "sin corridas todavía",
+    sinCorridas: "sin runs todavía",
   },
   portada: {
     calidad: "calidad",
@@ -112,19 +174,30 @@ export const es = {
     deCien: "/100",
     pieDeTabla: (benchmarks: number) =>
       `calidad ponderada por ${benchmarks} benchmarks · costo medido por tarea`,
-    ejes: (enFrontera: number) => `calidad × costo · ${enFrontera} variantes en la frontier`,
-    ejesCorto: (enFrontera: number) => `calidad × costo · ${enFrontera} variantes`,
-    bajoElTecho: "bajo el techo",
+    ejes: (elegibles: number, enFrontera: number) =>
+      `calidad × costo · ${elegibles} variantes · ${enFrontera} en el frontier`,
+    ejesCorto: (elegibles: number) => `calidad × costo · ${elegibles} variantes`,
+    unaFuente: (n: number) =>
+      n === 1
+        ? "Otra variante está medida por un solo benchmark y no compite por las tres respuestas"
+        : `Otras ${n} variantes están medidas por un solo benchmark y no compiten por las tres respuestas`,
+    unaFuenteEnlace: "cuáles y por qué",
     alternativas: (n: number) => (n === 1 ? "1 alternativa" : `${n} alternativas`),
     sinAcceso: "Otras respuestas a esta misma pregunta, por si no puedes usar la recomendada",
     faltanRespuestas:
       "Con estos benchmarks no hay datos para las tres respuestas: solo salen las que se pueden defender.",
+    // Cuando faltan respuestas con el mínimo en uno el motivo es el contrario:
+    // sobran candidatos baratos con una sola medición, y entre el más barato y
+    // el mejor ya no queda tramo intermedio que recomendar. Decirlo importa,
+    // porque es la consecuencia de haber tocado el interruptor.
+    faltanRespuestasConUno:
+      "Con un solo benchmark exigido, los medidos una vez entran baratos y con la nota de ese único benchmark, y aplastan el tramo intermedio. No es que falten datos: es lo que pasa al aflojar la regla.",
     sinDatosDeCosto: "sin costo medido",
   },
   vacio: {
     titulo: "Ningún modelo pasa esos filtros",
     descripcion:
-      "Con esas restricciones no queda nada medido por suficientes benchmarks. Prueba a subir el techo de costo o a quitar el filtro de proveedor.",
+      "Con esas restricciones no queda nada medido por suficientes benchmarks. Prueba a subir el techo de costo o a quitar el atajo.",
   },
   generico: {
     porTarea: "/tarea",

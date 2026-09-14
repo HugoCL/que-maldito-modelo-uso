@@ -5,8 +5,7 @@ import {
   THRESHOLDS,
   TOKEN_MIX,
   TOKEN_MIX_SIN_CACHE,
-  pesosDelPerfil,
-  type PerfilId,
+  pesosIguales,
 } from "./config";
 
 export type MetricSample = {
@@ -45,6 +44,10 @@ export type MetricBreakdown = {
   value: number;
   normalized: number;
   weight: number;
+  /** Los extremos del conjunto con los que se reescaló. Sin ellos el 0-100 no
+      se puede comprobar: es un número sin unidad. */
+  min: number;
+  max: number;
 };
 
 export type Scored = Candidate & {
@@ -52,7 +55,7 @@ export type Scored = Candidate & {
   qualityLo: number;
   qualityHi: number;
   coverage: number;
-  /** Fuentes distintas que midieron esta variante dentro del perfil. */
+  /** Fuentes distintas que midieron esta variante. */
   benchmarks: number;
   confidence: "alta" | "media" | "baja";
   cost?: number;
@@ -157,11 +160,11 @@ function medianCost(samples: CostSample[]): number | undefined {
 export function scoreCandidate(
   c: Candidate,
   bounds: Bounds,
-  perfil: PerfilId,
   costFactor: number | undefined,
   now: number,
+  sinMetricas: Metric[] = [],
 ): Scored {
-  const pesos = pesosDelPerfil(perfil);
+  const pesos = pesosIguales(sinMetricas);
 
   let sum = 0;
   let sumLo = 0;
@@ -185,15 +188,23 @@ export function scoreCandidate(
     sumLo += lo * weight;
     sumHi += hi * weight;
     totalWeight += weight;
-    breakdown.push({ metric: m.metric, value: m.value, normalized: n, weight });
+    const b = bounds[m.metric];
+    breakdown.push({
+      metric: m.metric,
+      value: m.value,
+      normalized: n,
+      weight,
+      min: b?.min ?? m.value,
+      max: b?.max ?? m.value,
+    });
   }
 
   const coverage = totalWeight;
   // Cuántas fuentes distintas lo midieron, que es lo que decide si puede ser
   // una respuesta. La cobertura se sigue guardando porque dice otra cosa:
-  // cuánto del perfil está medido, ya descontada la antigüedad.
+  // cuánto de lo que hay está medido, ya descontada la antigüedad.
   const benchmarks = breakdown.length;
-  const delPerfil = Object.values(pesos).filter((p) => p > 0).length;
+  const cuentan = Object.values(pesos).filter((p) => p > 0).length;
   const quality = totalWeight > 0 ? (sum / totalWeight) * 100 : 0;
   const qualityLo = totalWeight > 0 ? (sumLo / totalWeight) * 100 : 0;
   const qualityHi = totalWeight > 0 ? (sumHi / totalWeight) * 100 : 0;
@@ -212,7 +223,7 @@ export function scoreCandidate(
     coverage,
     benchmarks,
     confidence:
-      benchmarks >= delPerfil
+      benchmarks >= cuentan
         ? "alta"
         : benchmarks >= THRESHOLDS.benchmarksMinimos
           ? "media"
@@ -226,12 +237,17 @@ export function scoreCandidate(
   };
 }
 
+/**
+ * Los límites de normalización salen siempre del conjunto completo, también
+ * cuando se apaga una fuente: apagar CursorBench no puede cambiar la nota de
+ * DeepSWE de un modelo, solo dejar de promediarla con la otra.
+ */
 export function scoreAll(
   candidates: Candidate[],
-  perfil: PerfilId,
   now: number = Date.now(),
+  sinMetricas: Metric[] = [],
 ): Scored[] {
   const bounds = computeBounds(candidates);
   const costFactor = calibrateCostFactor(candidates);
-  return candidates.map((c) => scoreCandidate(c, bounds, perfil, costFactor, now));
+  return candidates.map((c) => scoreCandidate(c, bounds, costFactor, now, sinMetricas));
 }

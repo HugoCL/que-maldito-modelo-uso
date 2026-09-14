@@ -1,82 +1,46 @@
 import { v } from "convex/values";
 import { query } from "../_generated/server";
 import { candidatosDesdeLaBase } from "../scoring/recompute";
-import { scoreAll, type Scored } from "../scoring/compute";
+import { scoreAll } from "../scoring/compute";
 import { elegibles, elegirTarjetas, paretoFrontier } from "../scoring/tiers";
+import { aTarjeta } from "../scoring/presentar";
 import {
-  METRICAS_ACTIVAS,
   METRIC_CONFIG,
-  PERFILES,
   THRESHOLDS,
   TOKEN_MIX,
-  pesosDelPerfil,
-  type PerfilId,
+  fuenteDeMetrica,
+  metricasExcluidas,
+  minimoDeBenchmarks,
+  pesosIguales,
 } from "../scoring/config";
+import { aplicarFiltrosDeCatalogo } from "../scoring/filtros";
 import { SOURCES } from "../sources/registry";
 
-const perfilValidator = v.union(
-  v.literal("general"),
-  v.literal("mantenimiento"),
-  v.literal("agentico"),
-);
+/**
+ * Fuentes que el visitante ha apagado, por su identificador (`cursorbench`).
+ * Solo se pueden apagar las que declaran un sesgo de cobertura en la config;
+ * cualquier otra cosa que llegue aquí se ignora sola.
+ */
+const sinFuentes = v.optional(v.array(v.string()));
 
 const filtros = {
-  perfil: v.optional(perfilValidator),
+  sin: sinFuentes,
+  /**
+   * Cuántos benchmarks distintos hay que exigir para poder ser respuesta. Sin
+   * él manda el umbral de la metodología; la web solo deja bajarlo a uno, que
+   * es "todo lo que alguien ha medido".
+   */
+  minimo: v.optional(v.number()),
   /** Solo modelos disponibles en alguno de estos proveedores. */
   proveedores: v.optional(v.array(v.string())),
   soloOpenWeights: v.optional(v.boolean()),
   /** Techo de USD por tarea. */
   presupuestoMax: v.optional(v.number()),
+  /** Atajo de familia (`gpt`, `claude`, `gemini`, `grok`). */
+  familia: v.optional(v.string()),
+  /** Modelos que el visitante saca de la evaluación, por `modelKey`. */
+  ocultos: v.optional(v.array(v.string())),
 };
-
-function aplicarFiltros(
-  puntuados: Scored[],
-  args: {
-    proveedores?: string[];
-    soloOpenWeights?: boolean;
-    presupuestoMax?: number;
-  },
-): Scored[] {
-  return puntuados.filter((s) => {
-    if (args.soloOpenWeights && !s.openWeights) return false;
-    if (args.presupuestoMax !== undefined && (s.cost ?? Infinity) > args.presupuestoMax) return false;
-    if (args.proveedores?.length && !args.proveedores.some((p) => s.providers.includes(p))) {
-      return false;
-    }
-    return true;
-  });
-}
-
-/** Lo que necesita una tarjeta para dibujarse, sin nada de más. */
-function aTarjeta(s: Scored) {
-  return {
-    variantKey: s.variantKey,
-    modelKey: s.modelKey,
-    modelName: s.modelName,
-    creator: s.creator,
-    effort: s.effort,
-    quality: Math.round(s.quality * 10) / 10,
-    qualityLo: Math.round(s.qualityLo * 10) / 10,
-    qualityHi: Math.round(s.qualityHi * 10) / 10,
-    coverage: Math.round(s.coverage * 100) / 100,
-    benchmarks: s.benchmarks,
-    confidence: s.confidence,
-    cost: s.cost !== undefined ? Math.round(s.cost * 100) / 100 : undefined,
-    costMeasured: s.costMeasured,
-    costLo: s.costLo,
-    costHi: s.costHi,
-    blendedPrice: s.blendedPrice,
-    openWeights: s.openWeights,
-    providers: s.providers,
-    programmingRank: s.programmingRank,
-    metricas: s.metricBreakdown.map((m) => ({
-      metric: m.metric,
-      etiqueta: METRIC_CONFIG[m.metric].label,
-      valor: Math.round(m.value * 1000) / 10,
-      peso: Math.round(m.weight * 100) / 100,
-    })),
-  };
-}
 
 /**
  * Las tres respuestas, recalculadas con los filtros puestos.
@@ -93,14 +57,21 @@ function aTarjeta(s: Scored) {
 export const recomendaciones = query({
   args: filtros,
   handler: async (ctx, args) => {
-    const perfil: PerfilId = args.perfil ?? "general";
     const candidatos = await candidatosDesdeLaBase(ctx);
-    const puntuados = scoreAll(candidatos, perfil);
-    const filtrados = aplicarFiltros(puntuados, args);
+    const puntuados = scoreAll(candidatos, Date.now(), metricasExcluidas(args.sin));
+    const filtrados = aplicarFiltrosDeCatalogo(puntuados, args);
+    const minimo = minimoDeBenchmarks(args.minimo);
 
-    const tarjetas = elegirTarjetas(filtrados);
-    const pool = elegibles(filtrados);
-    const frontera = paretoFrontier(pool);
+    const tarjetas = elegirTarjetas(filtrados, minimo);
+    const pool = elegibles(filtrados, minimo);
+    const enFrontera = new Set(paretoFrontier(pool));
+
+    // Medidas por menos benchmarks de los que se exigen: no pueden ser
+    // respuesta, pero existen y son casi todo lo que hay de open weight. El
+    // número se enseña en la portada para que la ausencia se lea como una
+    // decisión y no como un agujero de datos. Con el mínimo en uno no queda
+    // ninguna fuera y la línea desaparece sola.
+    const unaFuente = filtrados.filter((s) => s.benchmarks > 0 && s.benchmarks < minimo);
 
     const ultima = await ctx.db
       .query("ingestRuns")
@@ -109,13 +80,12 @@ export const recomendaciones = query({
       .first();
 
     return {
-      perfil,
-      perfilEtiqueta: PERFILES[perfil].label,
       actualizado: ultima?.finishedAt ?? ultima?.startedAt ?? null,
       totales: {
         candidatos: candidatos.length,
         elegibles: pool.length,
-        enFrontera: frontera.length,
+        enFrontera: enFrontera.size,
+        unaFuente: unaFuente.length,
       },
       tarjetas: tarjetas.map((t) => ({
         tier: t.tier,
@@ -124,19 +94,22 @@ export const recomendaciones = query({
         ganador: aTarjeta(t.ganador),
         alternativas: t.alternativas.map(aTarjeta),
       })),
-      frontera: frontera
+      // El conjunto elegible entero, no solo la frontera. El gráfico dibuja
+      // los dos: la frontera es una línea que se entiende mucho mejor cuando
+      // se ve contra lo que dejó atrás.
+      elegibles: pool
         .sort((a, b) => b.quality - a.quality)
-        .map(aTarjeta),
+        .map((s) => ({ ...aTarjeta(s), enFrontera: enFrontera.has(s) })),
     };
   },
 });
 
 /** Todo lo puntuado, para el comparador. Incluye lo de confianza baja. */
 export const listaVariantes = query({
-  args: { perfil: v.optional(perfilValidator) },
-  handler: async (ctx, { perfil = "general" }) => {
+  args: { sin: sinFuentes },
+  handler: async (ctx, args) => {
     const candidatos = await candidatosDesdeLaBase(ctx);
-    const puntuados = scoreAll(candidatos, perfil);
+    const puntuados = scoreAll(candidatos, Date.now(), metricasExcluidas(args.sin));
     const enFrontera = new Set(paretoFrontier(elegibles(puntuados)));
     return puntuados
       .sort((a, b) => b.quality - a.quality)
@@ -146,8 +119,8 @@ export const listaVariantes = query({
 
 /** Ficha de un modelo: todas sus variantes y el desglose por benchmark. */
 export const modelo = query({
-  args: { modelKey: v.string(), perfil: v.optional(perfilValidator) },
-  handler: async (ctx, { modelKey, perfil = "general" }) => {
+  args: { modelKey: v.string(), sin: sinFuentes },
+  handler: async (ctx, { modelKey, sin }) => {
     const m = await ctx.db
       .query("models")
       .withIndex("by_modelKey", (q) => q.eq("modelKey", modelKey))
@@ -155,7 +128,7 @@ export const modelo = query({
     if (!m) return null;
 
     const candidatos = await candidatosDesdeLaBase(ctx);
-    const puntuados = scoreAll(candidatos, perfil);
+    const puntuados = scoreAll(candidatos, Date.now(), metricasExcluidas(sin));
     const variantes = puntuados
       .filter((s) => s.modelKey === modelKey)
       .sort((a, b) => b.quality - a.quality);
@@ -187,23 +160,23 @@ export const metodologia = query({
   args: {},
   handler: async () => ({
     metricas: (() => {
-      const pesos = pesosDelPerfil("general");
+      const pesos = pesosIguales();
       return Object.entries(METRIC_CONFIG)
         .filter(([, c]) => c.activa)
         .map(([metric, c]) => ({
           metric,
+          // El identificador con el que se apaga desde la URL. Va aquí para
+          // que la barra de filtros no tenga que partir claves a mano.
+          fuente: fuenteDeMetrica(metric as keyof typeof METRIC_CONFIG),
           etiqueta: c.label,
           peso: pesos[metric as keyof typeof pesos],
           vidaMediaMeses: c.halfLifeMonths,
+          sesgo: c.sesgo,
         }));
     })(),
-    perfiles: Object.entries(PERFILES).map(([id, p]) => ({
-      id,
-      etiqueta: p.label,
-      mide: (p.mide ?? METRICAS_ACTIVAS()).map((m) => METRIC_CONFIG[m].label),
-    })),
     umbrales: {
       benchmarksMinimos: THRESHOLDS.benchmarksMinimos,
+      benchmarksMinimosSuelo: THRESHOLDS.benchmarksMinimosSuelo,
       pisoCalidadBarato: THRESHOLDS.pisoCalidadBarato,
       pisoCalidadDiaADia: THRESHOLDS.pisoCalidadDiaADia,
       percentilCostoBarato: THRESHOLDS.percentilCostoBarato,

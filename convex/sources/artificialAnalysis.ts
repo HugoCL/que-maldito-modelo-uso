@@ -6,8 +6,7 @@ import type { BenchmarkSource, ParsedObservation } from "./types";
  * Sus términos de API gratuita dicen "internal use only; no redistribution".
  * Publicar sus índices en un sitio público ES redistribuir, así que esta fuente
  * solo debe encenderse con licencia comercial o permiso escrito de AA. El
- * adapter queda listo para ese día; mientras tanto AA aparece solo como enlace
- * en /creditos.
+ * adapter queda listo para ese día; mientras tanto no se muestra en la UI.
  *
  * Para encenderla: conseguir el permiso, poner ARTIFICIAL_ANALYSIS_API_KEY en
  * las variables de entorno de Convex y cambiar `enabled` a true.

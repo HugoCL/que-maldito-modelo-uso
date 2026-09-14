@@ -2,11 +2,18 @@ import type { BenchmarkSource, ParsedObservation } from "./types";
 import { normalizeEffort } from "../matching/normalize";
 
 /**
- * Terminal-Bench 2.0 (Stanford / Harbor / Laude Institute): tareas de terminal
- * de punta a punta: compilar, administrar servidores, ciencia de datos.
+ * Terminal-Bench (Stanford / Harbor / Laude Institute): tareas de terminal de
+ * punta a punta: compilar, administrar servidores, ciencia de datos.
  *
  * La página es Next.js y serializa las filas en el payload de flight con las
  * comillas escapadas. Al desescapar queda JSON legible.
+ *
+ * Solo sirve la versión vigente, y la sirve en la raíz: las direcciones por
+ * versión (`/leaderboard/terminal-bench/2.0`) devuelven un 308 a `/?version=`
+ * y el payload que llega es el de la última de todas formas, porque el cambio
+ * de versión lo hace el cliente. O sea que pedir una versión antigua desde el
+ * servidor no devuelve esa versión: devuelve la nueva con el nombre viejo.
+ * Por eso se pide la raíz y se comprueba qué versión vino.
  *
  * Ojo con la lectura: cada fila es agente + modelo (Codex, Claude Code,
  * Terminus...), así que mide la pareja y no el modelo solo. Nos quedamos con el
@@ -32,9 +39,31 @@ type Row = {
   n_trials?: number;
 };
 
+/**
+ * La versión del leaderboard que este archivo sabe leer y que la web nombra.
+ *
+ * Va aquí arriba y se comprueba contra lo que traiga la página porque el sitio
+ * publica una sola versión: el día que salga la siguiente, la raíz empieza a
+ * servirla sin avisar y, sin esta comprobación, seguiríamos publicando sus
+ * cifras con el nombre de la anterior. Ya pasó una vez.
+ */
+export const VERSION = "Terminal-Bench 4.0";
+
 export function parse(body: string): ParsedObservation[] {
   const unescaped = body.replace(/\\"/g, '"');
   const best = new Map<string, ParsedObservation>();
+
+  // Preferimos quedarnos un día sin esta fuente a atribuirle a una versión
+  // números de otra. El fallo sale en /estado con las dos versiones escritas,
+  // que es todo lo que hace falta para arreglarlo: cambiar VERSION y mirar si
+  // el resto del parser sigue valiendo.
+  const publicada = unescaped.match(/"title":"(Terminal-Bench [\d.]+)"/)?.[1];
+  if (publicada !== undefined && publicada !== VERSION) {
+    throw new Error(
+      `Terminal-Bench publica ahora ${publicada} y aquí se declara ${VERSION}. ` +
+        "Revisa convex/sources/terminalBench.ts antes de seguir ingiriendo.",
+    );
+  }
 
   // Las filas viven sueltas dentro del payload; las leemos una por una en vez
   // de intentar reconstruir el documento completo, que trae otras cosas.
@@ -88,12 +117,12 @@ export function parse(body: string): ParsedObservation[] {
 export const terminalBench: BenchmarkSource = {
   id: "terminalbench",
   kind: "benchmark",
-  name: "Terminal-Bench 2.0",
-  homepage: "https://www.tbench.ai/leaderboard/terminal-bench/2.0",
-  url: "https://www.tbench.ai/leaderboard/terminal-bench/2.0",
-  attribution: "Terminal-Bench 2.0, de Stanford / Harbor / Laude Institute",
+  name: VERSION,
+  homepage: "https://www.tbench.ai/",
+  url: "https://www.tbench.ai/",
+  attribution: `${VERSION}, de Stanford / Harbor / Laude Institute`,
   license: "Leaderboard público; el sitio no publica robots.txt y marca noindex.",
   enabled: true,
-  note: "Un fetch al día, User-Agent identificable. Cada fila es agente+modelo: nos quedamos con el mejor por modelo.",
+  note: "Un fetch al día, User-Agent identificable. Cada fila es agente+modelo: nos quedamos con el mejor por modelo. El sitio solo sirve la versión vigente: si sube de versión, la ingesta falla en vez de renombrar sola los números.",
   parse,
 };

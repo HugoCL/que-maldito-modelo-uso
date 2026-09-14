@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { fuentesApagadas } from "@/components/barra-de-filtros";
 import { obtenerModelo, obtenerRecomendaciones } from "@/lib/datos";
 import { es } from "@/lib/i18n/es";
 import { cn } from "@/lib/utils";
@@ -22,9 +23,18 @@ const precio = (n?: number) => (n === undefined ? "—" : `$${n.toFixed(2)}`);
  * decisión que casi nadie toma a propósito y la única que esta página puede
  * cambiar.
  */
-export default async function FichaModelo({ params }: PageProps<"/modelo/[modelKey]">) {
+export default async function FichaModelo({
+  params,
+  searchParams,
+}: PageProps<"/modelo/[modelKey]">) {
   const { modelKey } = await params;
-  const [m, datos] = await Promise.all([obtenerModelo(modelKey), obtenerRecomendaciones()]);
+  // Las fuentes apagadas llegan desde la portada en la URL: la ficha tiene que
+  // puntuar con lo mismo con lo que se puntuó la recomendación que trajo aquí.
+  const sin = fuentesApagadas((await searchParams).sin as string | undefined);
+  const [m, datos] = await Promise.all([
+    obtenerModelo(modelKey, sin),
+    obtenerRecomendaciones({ sin }),
+  ]);
   if (!m) notFound();
 
   // El único acento de la página: el effort que hoy gana una de las tres
@@ -39,7 +49,20 @@ export default async function FichaModelo({ params }: PageProps<"/modelo/[modelK
     (a, b) => (a.cost ?? Infinity) - (b.cost ?? Infinity) || a.quality - b.quality,
   );
   const salto = saltoFinal(ordenadas.filter((v) => v.cost !== undefined));
-  const conDesglose = [...m.variantes].sort((a, b) => b.quality - a.quality)[0];
+
+  // El desglose sigue el mismo orden que la tabla de efforts para que las dos
+  // se lean en paralelo: la de arriba dice cuánto saca cada nivel, esta de
+  // dónde sale ese número.
+  const conDesglose = ordenadas.filter((v) => v.metricas.length > 0);
+
+  // Los extremos de normalización son del conjunto entero, así que no cambian
+  // entre variantes: se dicen una vez debajo de la tabla en lugar de repetirse
+  // en cada fila.
+  const escalas = [...new Map(conDesglose.flatMap((v) => v.metricas).map((m) => [m.metric, m])).values()]
+    .map((m) =>
+      es.desglose.escala(m.etiqueta, `${m.minimo.toFixed(1)}%`, `${m.maximo.toFixed(1)}%`),
+    )
+    .join("; ");
 
   return (
     <main className="mx-auto flex w-full max-w-[620px] flex-col gap-[26px] px-5 py-10 sm:px-[30px]">
@@ -106,27 +129,60 @@ export default async function FichaModelo({ params }: PageProps<"/modelo/[modelK
         {m.openWeights ? <Fila etiqueta={es.tarjeta.pesosAbiertos} valor="sí" /> : null}
       </dl>
 
-      {m.variantes.length > 0 ? (
-        <div className="flex flex-col gap-2 border-t pt-5">
-          <span className="text-[13px] font-medium">
-            {es.tarjeta.medidoPor}
-            {conDesglose.effort !== "default" ? (
-              <span className="ml-1.5 font-mono text-[11.5px] font-normal text-muted-foreground">
-                {conDesglose.effort}
-              </span>
-            ) : null}
-          </span>
-          <div className="flex flex-col gap-1.5 font-mono text-[12px]">
-            {conDesglose.metricas.map((met) => (
-              <div key={met.metric} className="flex items-baseline justify-between gap-4">
-                <span className="text-foreground/75">{met.etiqueta}</span>
-                {/* Sin el peso al lado: todos los benchmarks valen lo mismo,
-                    así que repetirlo en cada fila solo añade un número que no
-                    distingue nada. Se explica una vez en /metodologia. */}
-                <span className="text-muted-foreground tabular-nums">{met.valor.toFixed(1)}%</span>
+      {conDesglose.length > 0 ? (
+        <div className="flex flex-col gap-2.5 border-t pt-5">
+          <span className="text-[13px] font-medium">{es.desglose.titulo}</span>
+
+          {/* Una por effort, en el mismo orden que la tabla de arriba: la
+              pregunta de esta página es qué compra subir de nivel, y explicar
+              solo una de las cinco notas deja las otras cuatro en un número
+              que hay que creerse.
+
+              Dos columnas por benchmark: lo que publica y ese mismo resultado
+              ya en la escala de 0 a 100, que es lo único que se promedia. El
+              peso no va en la fila porque todos valen lo mismo. */}
+          <div className="flex flex-col overflow-hidden rounded-[10px] border font-mono text-[12px]">
+            {conDesglose.map((v) => (
+              <div key={v.variantKey} className="border-t border-border first:border-t-0">
+                <div className="flex items-baseline gap-x-4 bg-muted/40 px-3.5 py-2">
+                  <span className="min-w-0 flex-1">
+                    {v.effort === "default" ? es.tarjeta.sinEffort : v.effort}
+                  </span>
+                  <span className="w-14 text-right font-medium tabular-nums">
+                    {v.quality.toFixed(1)}
+                  </span>
+                </div>
+                {v.metricas.map((met) => (
+                  <div
+                    key={met.metric}
+                    className="flex items-baseline gap-x-4 px-3.5 py-[7px] text-muted-foreground"
+                  >
+                    <span className="min-w-0 flex-1 truncate">{met.etiqueta}</span>
+                    <span className="tabular-nums">{met.valor.toFixed(1)}%</span>
+                    {/* Con un decimal y no redondeado a entero: la gracia de
+                        esto es poder rehacer la media a mano, y 100 + 99 da
+                        99.5 cuando la nota dice 99.7. */}
+                    <span className="w-14 text-right tabular-nums text-foreground/75">
+                      {met.normalizado.toFixed(1)}
+                    </span>
+                  </div>
+                ))}
+                {v.metricas.length > 1 ? (
+                  <div className="flex items-baseline gap-x-4 px-3.5 pt-[3px] pb-2.5 text-[11px] text-muted-foreground">
+                    <span className="min-w-0 flex-1">{es.desglose.media}</span>
+                    <span className="w-14 text-right tabular-nums">{v.quality.toFixed(1)}</span>
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
+
+          <p className="text-pretty text-[12.5px] leading-[1.5] text-muted-foreground">
+            {es.desglose.comoSeLee} {es.desglose.escalas(escalas)}
+            {conDesglose.some((v) => v.metricas.length < 2)
+              ? ` ${es.desglose.unSoloBenchmark}`
+              : ""}
+          </p>
         </div>
       ) : null}
 

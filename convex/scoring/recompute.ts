@@ -74,9 +74,9 @@ export const recalcular = internalMutation({
     if (candidatos.length === 0) return { candidatos: 0, tarjetas: 0 };
 
     const ahora = Date.now();
-    // El perfil general es el que se guarda; los demás se calculan en vivo
+    // Lo que se guarda es el resultado del cálculo de hoy; la web lo recalcula en vivo
     // cuando alguien mueve un filtro, sobre los mismos datos.
-    const puntuados = scoreAll(candidatos, "general", ahora);
+    const puntuados = scoreAll(candidatos, ahora);
     const tarjetas = elegirTarjetas(puntuados);
 
     const variantes = await ctx.db.query("variants").collect();

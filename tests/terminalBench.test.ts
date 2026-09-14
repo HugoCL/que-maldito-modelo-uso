@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { parse } from "../convex/sources/terminalBench";
+import { METRIC_CONFIG } from "../convex/scoring/config";
+import { VERSION, parse, terminalBench } from "../convex/sources/terminalBench";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const obs = parse(readFileSync(join(here, "fixtures/terminalbench.html"), "utf8"));
@@ -35,4 +36,25 @@ test("el costo total de la corrida se reparte entre los intentos", () => {
 
 test("los accuracy vienen en porcentaje y salen como proporción", () => {
   assert.ok(obs.every((o) => o.value > 0 && o.value <= 1));
+});
+
+/**
+ * El sitio solo sirve la versión vigente, así que el día que suba de versión
+ * esta fuente empieza a devolver otros números por la misma dirección. Antes
+ * pasó sin que nadie se enterara: la web publicaba cifras de la 4.0 firmadas
+ * como 2.0. Que falle es la única forma de que se note.
+ */
+test("una versión distinta del leaderboard no se ingiere en silencio", () => {
+  const fixture = readFileSync(join(here, "fixtures/terminalbench.html"), "utf8");
+  const otra = fixture.replaceAll(VERSION, "Terminal-Bench 5.0");
+
+  assert.throws(() => parse(otra), /Terminal-Bench 5\.0/);
+  // Y la de siempre sigue pasando, no es que lance con cualquier cosa.
+  assert.ok(parse(fixture).length >= 10);
+});
+
+test("la atribución y la etiqueta nombran la versión que se lee", () => {
+  assert.equal(terminalBench.name, VERSION);
+  assert.ok(terminalBench.attribution.startsWith(VERSION));
+  assert.equal(METRIC_CONFIG["terminalbench.accuracy"].label, VERSION);
 });

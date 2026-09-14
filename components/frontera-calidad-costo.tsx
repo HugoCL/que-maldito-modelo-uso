@@ -27,6 +27,11 @@ import type { Tarjeta, Tier, Variante } from "@/lib/types";
  * techo de presupuesto: lo que el techo hace es velar esa zona, no borrarla.
  * Un filtro que esconde lo que descarta deja a quien mira sin saber cuánto
  * está renunciando, que es la única pregunta interesante de esta pantalla.
+ *
+ * Y se dibuja contra el resto del conjunto elegible, no sola. Una frontera sin
+ * nada detrás es una curva cualquiera: lo que la convierte en un argumento es
+ * ver la nube de variantes que se quedaron por debajo, cada una más cara o
+ * peor que alguna de la línea.
  */
 
 const config = {
@@ -47,6 +52,8 @@ type Punto = {
   hi: number;
   tier: Tier | null;
   medido: boolean;
+  /** Si está en la frontera de Pareto. Lo demás es el fondo contra el que se lee. */
+  frontera: boolean;
   /** De qué lado del punto cabe su etiqueta. Ver ladoLibre(). */
   arriba: boolean;
 };
@@ -55,12 +62,10 @@ export function FronteraCalidadCosto({
   variantes,
   tarjetas,
   techo,
-  enFrontera,
 }: {
   variantes: Variante[];
   tarjetas: Tarjeta[];
   techo?: number;
-  enFrontera: number;
 }) {
   const ganadores = new Map<string, Tier>(tarjetas.map((t) => [t.ganador.variantKey, t.tier]));
 
@@ -69,7 +74,7 @@ export function FronteraCalidadCosto({
     .map((v) => ({
       x: v.cost!,
       y: v.quality,
-      z: ganadores.has(v.variantKey) ? AREA_GANADOR : AREA_RESTO,
+      z: ganadores.has(v.variantKey) ? AREA_GANADOR : v.enFrontera ? AREA_FRONTERA : AREA_FONDO,
       nombre: v.modelName,
       effort: v.effort,
       calidad: v.quality,
@@ -77,12 +82,21 @@ export function FronteraCalidadCosto({
       hi: v.qualityHi,
       tier: ganadores.get(v.variantKey) ?? null,
       medido: v.costMeasured,
+      frontera: !!v.enFrontera,
       arriba: true,
     }))
     .sort((a, b) => a.x - b.x);
 
   if (puntos.length < 2) return null;
+  // El lado de la etiqueta se decide contra la nube entera y no solo contra la
+  // frontera: ahora hay puntos por debajo que también le pueden caer encima.
   for (const [i, p] of puntos.entries()) p.arriba = ladoLibre(puntos, i);
+
+  // Dos series: la línea solo puede unir los puntos de la frontera, y el resto
+  // tiene que quedar detrás. Van en arrays distintos porque recharts dibuja
+  // una serie entera con el mismo trazo.
+  const frontera = puntos.filter((p) => p.frontera);
+  const fondo = puntos.filter((p) => !p.frontera);
 
   const desde = marcaBajo(puntos[0].x);
   const hasta = marcaSobre(puntos[puntos.length - 1].x);
@@ -95,17 +109,11 @@ export function FronteraCalidadCosto({
   // se añade multiplicando, no sumando.
   const AIRE = 1.3;
 
-  const bajoElTecho = techo === undefined ? puntos : puntos.filter((p) => p.x <= techo);
-  const mejor = bajoElTecho[bajoElTecho.length - 1];
-
   return (
-    <div className="relative h-[196px] rounded-[10px] border pt-[32px] pr-[10px] pb-[6px] pl-[2px]">
+    <div className="relative h-[260px] rounded-[10px] border pt-[32px] pr-[10px] pb-[6px] pl-[2px] sm:h-[340px]">
       <span className="absolute top-[9px] left-[46px] font-mono text-[11.5px] whitespace-nowrap text-muted-foreground">
-        <span className="sm:hidden">{es.portada.ejesCorto(enFrontera)}</span>
-        <span className="hidden sm:inline">{es.portada.ejes(enFrontera)}</span>
-      </span>
-      <span className="absolute top-[9px] right-[30px] hidden font-mono text-[11.5px] text-muted-foreground sm:block">
-        {es.portada.bajoElTecho}: {mejor ? nombre(mejor) : "—"}
+        <span className="sm:hidden">{es.portada.ejesCorto(puntos.length)}</span>
+        <span className="hidden sm:inline">{es.portada.ejes(puntos.length, frontera.length)}</span>
       </span>
 
       <ChartContainer
@@ -144,23 +152,43 @@ export function FronteraCalidadCosto({
               salir volando desde la esquina superior izquierda. */}
           {/* El radio no se pone en el Cell: recharts lo ignora y todos los
               puntos saldrían iguales. El tamaño es el eje Z. */}
-          <ZAxis type="number" dataKey="z" range={[AREA_RESTO, AREA_GANADOR]} />
+          <ZAxis type="number" dataKey="z" range={[AREA_FONDO, AREA_GANADOR]} />
           <ChartTooltip cursor={false} isAnimationActive={false} content={<Globo />} />
-          <Scatter data={puntos} isAnimationActive={false}>
-            {puntos.map((p) => (
+
+          {/* Lo dominado, primero y muy tenue: es el fondo contra el que se lee
+              la frontera, no una lista de candidatos que haya que repasar. */}
+          <Scatter
+            data={fondo}
+            isAnimationActive={false}
+            fill="var(--muted-foreground)"
+            fillOpacity={0.22}
+            stroke="var(--background)"
+            strokeWidth={1}
+          />
+
+          {/* La frontera unida por una línea: es lo que la convierte en una
+              curva de intercambio y no en ocho puntos sueltos que resultan
+              estar en diagonal. */}
+          <Scatter
+            data={frontera}
+            isAnimationActive={false}
+            line={{ stroke: "var(--muted-foreground)", strokeOpacity: 0.3, strokeWidth: 1 }}
+            lineType="joint"
+          >
+            {frontera.map((p) => (
               <Cell
                 key={`${p.nombre}-${p.effort}`}
                 // Los ganadores se pintan con el color de su tarjeta; el resto
                 // queda en gris para que no compitan por la mirada.
                 fill={p.tier ? `var(--color-${p.tier})` : "var(--muted-foreground)"}
-                fillOpacity={p.tier ? 1 : 0.35}
+                fillOpacity={p.tier ? 1 : 0.5}
                 // Dos variantes con el mismo precio se solapan y se leen como
                 // un punto gordo. El borde del color del fondo las separa.
                 stroke="var(--background)"
                 strokeWidth={1.5}
               />
             ))}
-            <LabelList content={<Orden puntos={puntos} />} />
+            <LabelList content={<Orden puntos={frontera} />} />
           </Scatter>
 
           {/* zIndex por encima del de Scatter (600): recharts 3 pinta por
@@ -170,7 +198,11 @@ export function FronteraCalidadCosto({
             <>
               <ReferenceArea
                 x1={Math.max(techo, desde)}
-                x2={hasta}
+                // Hasta el final del dominio y no hasta la última marca: el
+                // aire que se le da al eje por la derecha también está por
+                // encima del techo, y dejarlo sin velar convierte el velo en
+                // un rectángulo con borde en vez de una zona que se sale.
+                x2={hasta * AIRE}
                 fill="var(--background)"
                 fillOpacity={0.85}
                 stroke="none"
@@ -211,9 +243,8 @@ function ladoLibre(puntos: Punto[], i: number): boolean {
 }
 
 const AREA_GANADOR = 120;
-const AREA_RESTO = 42;
-
-const nombre = (p: Punto) => (p.effort === "default" ? p.nombre : `${p.nombre} ${p.effort}`);
+const AREA_FRONTERA = 42;
+const AREA_FONDO = 16;
 
 /**
  * El 01, 02 y 03 de las tarjetas, sobre su punto de la curva: así se ve que

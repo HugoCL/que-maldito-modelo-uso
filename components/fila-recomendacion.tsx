@@ -15,9 +15,17 @@ import type { Tarjeta } from "@/lib/types";
  * cuerpo de letra mayor, porque es la única de las tres que es una
  * recomendación de verdad: las otras dos son respuestas a una restricción que
  * pone quien pregunta.
+ *
+ * Lo de confianza baja solo puede aparecer aquí si se ha bajado a mano el
+ * mínimo de benchmarks, y entonces tiene que ir marcado en la propia fila: una
+ * respuesta sostenida por una sola medición y otra por tres no se pueden ver
+ * igual solo porque las dos hayan salido del mismo cálculo.
  */
-export function FilaRecomendacion({ tarjeta }: { tarjeta: Tarjeta }) {
+export function FilaRecomendacion({ tarjeta, sin }: { tarjeta: Tarjeta; sin?: string }) {
   const { tier, ganador, razonCorta, alternativas } = tarjeta;
+  // Las fuentes apagadas viajan con el enlace: si no, la ficha puntuaría con
+  // todas y enseñaría una calidad distinta de la que acaba de leerse aquí.
+  const ficha = (modelKey: string) => (sin ? `/modelo/${modelKey}?sin=${sin}` : `/modelo/${modelKey}`);
   const t = es.tiers[tier];
   const destacada = tier === "dia_a_dia";
 
@@ -53,7 +61,7 @@ export function FilaRecomendacion({ tarjeta }: { tarjeta: Tarjeta }) {
           )}
         >
           <Link
-            href={`/modelo/${ganador.modelKey}`}
+            href={ficha(ganador.modelKey)}
             className="underline-offset-4 hover:underline"
           >
             {ganador.modelName}
@@ -68,6 +76,7 @@ export function FilaRecomendacion({ tarjeta }: { tarjeta: Tarjeta }) {
               {ganador.effort}
             </span>
           ) : null}
+          {ganador.confidence === "baja" ? <Baja /> : null}
         </p>
         <p
           className={cn(
@@ -96,13 +105,16 @@ export function FilaRecomendacion({ tarjeta }: { tarjeta: Tarjeta }) {
                   key={a.variantKey}
                   className="flex items-baseline justify-between gap-4 font-mono text-[11.5px] text-muted-foreground tabular-nums"
                 >
-                  <Link
-                    href={`/modelo/${a.modelKey}`}
-                    className="truncate underline-offset-4 hover:text-foreground hover:underline"
-                  >
-                    {a.modelName}
-                    {a.effort !== "default" ? ` ${a.effort}` : ""}
-                  </Link>
+                  <span className="flex min-w-0 items-baseline">
+                    <Link
+                      href={ficha(a.modelKey)}
+                      className="truncate underline-offset-4 hover:text-foreground hover:underline"
+                    >
+                      {a.modelName}
+                      {a.effort !== "default" ? ` ${a.effort}` : ""}
+                    </Link>
+                    {a.confidence === "baja" ? <Baja /> : null}
+                  </span>
                   <span className="shrink-0">
                     {a.quality.toFixed(0)} · {a.cost !== undefined ? `$${a.cost.toFixed(2)}` : "—"}
                   </span>
@@ -123,5 +135,23 @@ export function FilaRecomendacion({ tarjeta }: { tarjeta: Tarjeta }) {
         </span>
       </div>
     </div>
+  );
+}
+
+/**
+ * La marca de una nota sostenida por un solo benchmark.
+ *
+ * Un borde punteado y no un color de alarma: no dice que el modelo sea peor,
+ * dice que hay menos medido. El `title` lleva la frase entera para quien se
+ * pare encima, y el texto ya se lee solo para quien no.
+ */
+function Baja() {
+  return (
+    <span
+      title={es.tarjeta.confianzaBajaNota}
+      className="ml-2 shrink-0 rounded border border-dashed px-1.5 py-px align-middle font-mono text-[10.5px] font-normal whitespace-nowrap text-muted-foreground"
+    >
+      {es.tarjeta.confianzaBaja}
+    </span>
   );
 }

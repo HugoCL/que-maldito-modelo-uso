@@ -1,19 +1,21 @@
 import "server-only";
 import { fetchQuery } from "convex/nextjs";
 import { makeFunctionReference } from "convex/server";
-import { elegirTarjetas, paretoFrontier } from "../convex/scoring/tiers";
+import { metricasExcluidas, minimoDeBenchmarks } from "../convex/scoring/config";
+import { scoreAll } from "../convex/scoring/compute";
+import { aplicarFiltrosDeCatalogo } from "../convex/scoring/filtros";
+import { aTarjeta } from "../convex/scoring/presentar";
+import { elegibles, elegirTarjetas, paretoFrontier } from "../convex/scoring/tiers";
 import {
+  CANDIDATOS_SEMILLA,
   CAPTURADO_EL,
-  ELEGIBLES_SEMILLA,
   METODOLOGIA_SEMILLA,
   MODELOS_SEMILLA,
-  RECOMENDACIONES_SEMILLA,
 } from "./datos-semilla";
 import type {
   EstadoDelPipeline,
   FichaDeModelo,
   Metodologia,
-  PerfilId,
   Recomendaciones,
   Variante,
 } from "./types";
@@ -65,58 +67,54 @@ export type FiltrosDeRecomendacion = {
   /** Techo de USD por tarea. */
   presupuestoMax?: number;
   soloOpenWeights?: boolean;
+  /** Fuentes apagadas, por identificador (`cursorbench`). */
+  sin?: string[];
+  /** Benchmarks distintos exigidos para optar a una tarjeta. */
+  minimo?: number;
+  familia?: string;
+  ocultos?: string[];
 };
 
 export async function obtenerRecomendaciones(
-  perfil: PerfilId = "general",
   filtros: FiltrosDeRecomendacion = {},
 ): Promise<Recomendaciones> {
-  return pedirAConvex(
-    consultas.recomendaciones,
-    { perfil, ...filtros },
-    conFiltrosSobreLaSemilla(perfil, filtros),
-  );
+  return pedirAConvex(consultas.recomendaciones, { ...filtros }, sobreLaSemilla(filtros));
 }
 
 /**
  * La misma respuesta que daría Convex, calculada aquí sobre la instantánea.
  *
- * Un filtro no recorta una lista ya elegida: se vuelve a elegir sobre el
- * subconjunto, con la misma función `elegirTarjetas` que corre en el servidor.
- * Si no, poner un techo de $3 borraría dos de las tres filas en vez de
- * contestar cuáles son las tres mejores respuestas por debajo de $3, que es
- * justo la pregunta que hace quien pone un techo.
- *
- * Lo que no se recalcula son los límites de normalización: la calidad sale de
- * la instantánea completa, así que un modelo no cambia de número al mover un
- * filtro.
+ * No es una copia de la lógica: importa y corre las mismas funciones que el
+ * servidor sobre los mismos candidatos crudos. Lo que la instantánea guarda no
+ * es un resultado sino la entrada, así que un filtro nuevo funciona en los dos
+ * modos sin tocar nada aquí.
  */
-function conFiltrosSobreLaSemilla(
-  perfil: PerfilId,
-  filtros: FiltrosDeRecomendacion,
-): Recomendaciones {
-  const base = RECOMENDACIONES_SEMILLA[perfil];
-  const universo = ELEGIBLES_SEMILLA[perfil];
-  const pool = universo.filter(
-    (v) =>
-      (filtros.presupuestoMax === undefined ||
-        (v.cost ?? Infinity) <= filtros.presupuestoMax) &&
-      (!filtros.soloOpenWeights || !!v.openWeights),
-  );
-  if (pool.length === universo.length) return base;
+function sobreLaSemilla(filtros: FiltrosDeRecomendacion): Recomendaciones {
+  const puntuados = scoreAll(CANDIDATOS_SEMILLA, Date.now(), metricasExcluidas(filtros.sin));
+  const filtrados = aplicarFiltrosDeCatalogo(puntuados, filtros);
 
-  const frontera = paretoFrontier(pool).sort((a, b) => b.quality - a.quality);
+  const minimo = minimoDeBenchmarks(filtros.minimo);
+  const pool = elegibles(filtrados, minimo);
+  const enFrontera = new Set(paretoFrontier(pool));
+
   return {
-    ...base,
-    totales: { ...base.totales, elegibles: pool.length, enFrontera: frontera.length },
-    tarjetas: elegirTarjetas(pool).map((t) => ({
+    actualizado: null,
+    totales: {
+      candidatos: CANDIDATOS_SEMILLA.length,
+      elegibles: pool.length,
+      enFrontera: enFrontera.size,
+      unaFuente: filtrados.filter((s) => s.benchmarks > 0 && s.benchmarks < minimo).length,
+    },
+    tarjetas: elegirTarjetas(filtrados, minimo).map((t) => ({
       tier: t.tier,
       razon: t.razon,
       razonCorta: t.razonCorta,
-      ganador: t.ganador,
-      alternativas: t.alternativas,
+      ganador: aTarjeta(t.ganador),
+      alternativas: t.alternativas.map(aTarjeta),
     })),
-    frontera,
+    elegibles: [...pool]
+      .sort((a, b) => b.quality - a.quality)
+      .map((s) => ({ ...aTarjeta(s), enFrontera: enFrontera.has(s) })),
   };
 }
 
@@ -131,12 +129,12 @@ export async function obtenerEstado(): Promise<EstadoDelPipeline | null> {
 }
 
 /**
- * Todo lo puntuado del perfil. Lo usa /metodologia para sacar sus ejemplos de
+ * Todo lo puntuado. Lo usa /metodologia para sacar sus ejemplos de
  * los datos de hoy en vez de dejarlos escritos en el HTML, donde envejecen sin
  * que nadie se entere.
  */
-export async function obtenerVariantes(perfil: PerfilId = "general"): Promise<Variante[]> {
-  return pedirAConvex(consultas.listaVariantes, { perfil }, ELEGIBLES_SEMILLA[perfil]);
+export async function obtenerVariantes(sin?: string[]): Promise<Variante[]> {
+  return pedirAConvex(consultas.listaVariantes, { sin }, variantesDeLaSemilla(sin));
 }
 
 export async function obtenerMetodologia(): Promise<Metodologia> {
@@ -145,30 +143,21 @@ export async function obtenerMetodologia(): Promise<Metodologia> {
 
 export async function obtenerModelo(
   modelKey: string,
-  perfil: PerfilId = "general",
+  sin?: string[],
 ): Promise<FichaDeModelo | null> {
   const semilla = MODELOS_SEMILLA[modelKey];
-  if (!CONVEX_URL) {
-    if (!semilla) return null;
-    // En modo semilla las variantes se reconstruyen desde la frontera y el
-    // listado del perfil, que es lo que hay guardado.
-    const variantes = variantesDeLaSemilla(modelKey, perfil);
-    return { ...semilla, variantes };
-  }
-  const respaldo = semilla ? { ...semilla, variantes: variantesDeLaSemilla(modelKey, perfil) } : null;
-  return pedirAConvex(consultas.modelo, { modelKey, perfil }, respaldo);
+  const respaldo = semilla
+    ? { ...semilla, variantes: variantesDeLaSemilla(sin).filter((v) => v.modelKey === modelKey) }
+    : null;
+  if (!CONVEX_URL) return respaldo;
+  return pedirAConvex(consultas.modelo, { modelKey, sin }, respaldo);
 }
 
-function variantesDeLaSemilla(modelKey: string, perfil: PerfilId): Variante[] {
-  const datos = RECOMENDACIONES_SEMILLA[perfil];
-  const vistas = new Map<string, Variante>();
-  const candidatas = [
-    ...ELEGIBLES_SEMILLA[perfil],
-    ...datos.frontera,
-    ...datos.tarjetas.flatMap((t) => [t.ganador, ...t.alternativas]),
-  ];
-  for (const v of candidatas) {
-    if (v.modelKey === modelKey) vistas.set(v.variantKey, v);
-  }
-  return [...vistas.values()].sort((a, b) => b.quality - a.quality);
+/** Todo lo puntuado sobre la instantánea, con las mismas funciones del servidor. */
+function variantesDeLaSemilla(sin?: string[]): Variante[] {
+  const puntuados = scoreAll(CANDIDATOS_SEMILLA, Date.now(), metricasExcluidas(sin));
+  const enFrontera = new Set(paretoFrontier(elegibles(puntuados)));
+  return puntuados
+    .sort((a, b) => b.quality - a.quality)
+    .map((s) => ({ ...aTarjeta(s), enFrontera: enFrontera.has(s) }));
 }

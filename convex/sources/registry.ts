@@ -41,4 +41,4 @@ export const sourceById = (id: string): Source | undefined =>
  * API: lo mínimo es decir quiénes somos y dejar a dónde escribir.
  */
 export const USER_AGENT =
-  "QueMalditoModeloUso/0.1 (+https://quemalditomodelouso.com; ingesta diaria, atribución con enlace)";
+  "QueMalditoModeloUso/0.1 (+https://qmmu.hugocastro.dev; ingesta diaria, atribución con enlace)";

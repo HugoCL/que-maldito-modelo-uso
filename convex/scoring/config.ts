@@ -18,6 +18,20 @@ export type MetricConfig = {
    * `null` = no se descuenta (la fuente se actualiza en continuo).
    */
   halfLifeMonths: number | null;
+  /**
+   * Un defecto de cobertura conocido de la fuente, escrito para leerse.
+   *
+   * Cuando una métrica lo tiene, la web ofrece apagarla y enseña este texto al
+   * lado. No es lo mismo que `activa: false`: la fuente sigue midiendo y sus
+   * cifras siguen siendo buenas, pero no llega a todos los modelos por igual,
+   * y quien compara tiene derecho a ver el conjunto sin ella.
+   *
+   * Es la única clase de interruptor que este archivo admite en la web. Un
+   * control que reparte benchmarks por corazonada, como los perfiles de tarea
+   * que hubo aquí, no se puede defender; uno que apaga una fuente por un
+   * agujero comprobable de cobertura, sí.
+   */
+  sesgo?: string;
 };
 
 /**
@@ -30,17 +44,53 @@ export type MetricConfig = {
  */
 export const METRIC_CONFIG: Record<Metric, MetricConfig> = {
   // Tareas ambiguas multi-archivo de sesiones reales. Lo más cercano al trabajo.
-  "cursorbench.score": { label: "CursorBench 4.0", activa: true, halfLifeMonths: null },
+  "cursorbench.score": {
+    label: "CursorBench 4.0",
+    activa: true,
+    halfLifeMonths: null,
+    sesgo:
+      "CursorBench ya no puede medir modelos de OpenAI, así que pon no cuenta si quieres evitar sesgos.",
+  },
   // Tareas largas en 91 repos, 4 corridas completas, con intervalos publicados.
   "deepswe.pass_at_1": { label: "DeepSWE v1.1", activa: true, halfLifeMonths: null },
   // Trabajo agéntico de terminal de punta a punta.
-  "terminalbench.accuracy": { label: "Terminal-Bench 2.0", activa: true, halfLifeMonths: null },
+  "terminalbench.accuracy": { label: "Terminal-Bench 4.0", activa: true, halfLifeMonths: null },
   // Apagada por licencia. Ver convex/sources/artificialAnalysis.ts.
   "aa.coding_index": { label: "Artificial Analysis", activa: false, halfLifeMonths: null },
 };
 
 export const METRICAS_ACTIVAS = (): Metric[] =>
   (Object.keys(METRIC_CONFIG) as Metric[]).filter((m) => METRIC_CONFIG[m].activa);
+
+/** Las que se pueden apagar desde la web, o sea las que declaran un `sesgo`. */
+export const METRICAS_APAGABLES = (): Metric[] =>
+  METRICAS_ACTIVAS().filter((m) => METRIC_CONFIG[m].sesgo !== undefined);
+
+/**
+ * La parte de la clave de métrica que nombra a la fuente: `cursorbench.score`
+ * es `cursorbench`. Es lo que viaja en la URL, porque `?sin=cursorbench` se
+ * lee y `?sin=cursorbench.score` no.
+ */
+export const fuenteDeMetrica = (metric: Metric): string => metric.split(".")[0];
+
+/**
+ * El mínimo de benchmarks que pide la URL, acotado a lo que tiene sentido.
+ * Cualquier otra cosa cae en el valor por defecto en vez de dar un error: un
+ * parámetro raro no debería poder cambiar la metodología.
+ */
+export function minimoDeBenchmarks(pedido: number | undefined): number {
+  if (pedido === undefined) return THRESHOLDS.benchmarksMinimos;
+  const n = Math.floor(pedido);
+  return n >= THRESHOLDS.benchmarksMinimosSuelo && n <= THRESHOLDS.benchmarksMinimos
+    ? n
+    : THRESHOLDS.benchmarksMinimos;
+}
+
+/** De los identificadores de la URL a las métricas que hay que dejar fuera. */
+export function metricasExcluidas(fuentes: string[] | undefined): Metric[] {
+  if (!fuentes?.length) return [];
+  return METRICAS_APAGABLES().filter((m) => fuentes.includes(fuenteDeMetrica(m)));
+}
 
 /**
  * Mezcla de tokens de una sesión agéntica de código, para convertir precios de
@@ -72,11 +122,14 @@ export const THRESHOLDS = {
    * Benchmarks distintos que tiene que haber medido a una variante para que
    * pueda ganar tarjeta.
    *
-   * Se cuentan fuentes y no fracciones de peso. En un perfil que mira dos
-   * benchmarks, "la mitad de los pesos" sería un benchmark solo, justo lo que
-   * esta regla existe para impedir.
+   * Se cuentan fuentes y no fracciones de peso. Con los pesos iguales, "la
+   * mitad de los pesos" se cumpliría con un benchmark y medio, y un modelo con
+   * dos de tres pasaría igual que uno con uno de dos: la regla dejaría de
+   * decir lo único que quiere decir, que es cuántos lo han medido.
    */
   benchmarksMinimos: 2,
+  /** Lo más bajo que la web deja poner ese mínimo. Uno es "todo lo medido". */
+  benchmarksMinimosSuelo: 1,
   /** "Barato" no recomienda basura: mínimo 60% de la calidad del líder. */
   pisoCalidadBarato: 0.6,
   /** "Día a día" no baja de 75% de la calidad del líder. */
@@ -86,67 +139,21 @@ export const THRESHOLDS = {
 };
 
 /**
- * Perfiles de tarea.
+ * Reparto a partes iguales entre los benchmarks activos.
  *
- * Un perfil no reordena decimales: dice QUÉ benchmarks miden ese tipo de
- * trabajo. Los que entran siguen valiendo lo mismo entre sí. Así la pregunta
- * que hay que discutir cuando una recomendación sorprende es una que se puede
- * contestar ("¿mide Terminal-Bench el trabajo de arreglar bugs?") y no una que
- * no se puede, que es cuánto vale 0.35 frente a 0.30.
+ * Aquí hubo perfiles de tarea, que decidían qué benchmarks contaban según si
+ * ibas a arreglar bugs o a dejar un agente suelto. Se quitaron porque esa
+ * asignación era exactamente el pecado que este archivo dice no cometer:
+ * afirmar que Terminal-Bench mide el trabajo sin supervisión y CursorBench no
+ * es una opinión sin medir, igual de indefendible que decir que uno vale 0.35
+ * y otro 0.30. Un control que reparte los benchmarks por corazonada da tres
+ * respuestas distintas y ninguna razón para preferir una.
  *
- * `mide: null` = todos los benchmarks activos.
+ * Lo que queda es lo único que se sostiene: todo lo que hay medido cuenta, y
+ * cuenta lo mismo.
  */
-export type PerfilId = "general" | "mantenimiento" | "agentico";
-
-/**
- * Cada perfil se dice de tres maneras: `label` cuando hay sitio para una frase,
- * `corto` en la barra de la portada, que es una línea en minúscula, y
- * `descripcion` al pasar el ratón por encima. Lo de las dos voces ya lo hacen
- * los tiers en lib/i18n/es.ts; la tercera existe porque el nombre de un perfil
- * nunca va a caber en una pastilla y quien elige necesita saber qué está
- * eligiendo.
- */
-export const PERFILES: Record<
-  PerfilId,
-  { label: string; corto: string; descripcion: string; mide: Metric[] | null }
-> = {
-  general: {
-    label: "Cualquier cosa",
-    corto: "cualquier cosa",
-    descripcion: "Sin distinguir el tipo de trabajo: cuenta todo lo que hay medido.",
-    mide: null,
-  },
-  mantenimiento: {
-    label: "Arreglar bugs",
-    corto: "arreglar bugs",
-    descripcion:
-      "Trabajo sobre código que ya existe: cerrar issues y cambios repartidos por varios archivos.",
-    // DeepSWE es literalmente cerrar issues de repos ajenos y CursorBench son
-    // sesiones reales multi-archivo. Los dos miden trabajo sobre código que ya
-    // existe, que es de lo que va este perfil.
-    mide: ["cursorbench.score", "deepswe.pass_at_1"],
-  },
-  agentico: {
-    label: "Sin supervisión",
-    corto: "sin supervisión",
-    descripcion:
-      "Tareas largas, de muchos pasos y con terminal, que corren sin nadie delante.",
-    // Correr solo, muchos pasos, terminal incluida. CursorBench queda fuera:
-    // sus tareas vienen de sesiones con alguien delante. Es el perfil más
-    // exigente porque es del que menos gente publica datos.
-    mide: ["terminalbench.accuracy", "deepswe.pass_at_1"],
-  },
-  // No hay perfil de "código nuevo" porque ningún benchmark activo mide
-  // escribir de cero: DeepSWE parte de un issue con su test ya escrito y
-  // CursorBench de una sesión sobre un repo que existe. Ese perfil miraría los
-  // mismos dos que "mantenimiento" y daría la misma respuesta, y un control que
-  // no cambia nada promete una elección que no existe.
-};
-
-/** Reparto a partes iguales entre los benchmarks que mide el perfil. */
-export function pesosDelPerfil(perfil: PerfilId): Record<Metric, number> {
-  const activas = METRICAS_ACTIVAS();
-  const cuentan = (PERFILES[perfil].mide ?? activas).filter((m) => activas.includes(m));
+export function pesosIguales(sinMetricas: Metric[] = []): Record<Metric, number> {
+  const cuentan = METRICAS_ACTIVAS().filter((m) => !sinMetricas.includes(m));
   const peso = cuentan.length ? 1 / cuentan.length : 0;
 
   return Object.fromEntries(

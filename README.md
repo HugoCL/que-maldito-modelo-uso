@@ -84,7 +84,7 @@ Ninguna medición es nuestra. El pipeline cruza el trabajo de otros y enlaza sie
 | [models.dev](https://models.dev) (MIT) | catálogo canónico: precios, contexto, fechas, capacidades |
 | [DeepSWE v1.1](https://deepswe.datacurve.ai/) | `pass@1` con intervalos de confianza sobre 4 corridas, y costo real por tarea |
 | [CursorBench 4.0](https://cursor.com/cursorbench) | tareas multi-archivo de sesiones reales, con costo por tarea y por effort |
-| [Terminal-Bench 2.0](https://www.tbench.ai/) | trabajo agéntico de terminal de punta a punta |
+| [Terminal-Bench 4.0](https://www.tbench.ai/) | trabajo agéntico de terminal de punta a punta |
 | [OpenRouter](https://openrouter.ai) | disponibilidad y uso real en programación |
 
 Para entrar, un benchmark tiene que medir modelos que alguien pueda usar hoy y solaparse con
@@ -96,20 +96,50 @@ benchmarks que hacen falta para ser una respuesta, y la fuente entera no cambia 
 redistribuir. El adapter está escrito en `convex/sources/artificialAnalysis.ts` con
 `enabled: false`; se enciende el día que haya licencia comercial o permiso escrito.
 
-## Los pesos y los perfiles
+## Los pesos
 
 **Todos los benchmarks que entran pesan lo mismo.** Nadie sabe si CursorBench vale exactamente
 1.2 veces lo que vale DeepSWE, y un número con dos decimales parece medido aunque esté inventado.
 Un reparto así decide quién sale recomendado sin que haya forma de defenderlo.
 
-Lo único que se decide es **cuáles entran**, y eso es lo que hace un perfil: `agentico` mira
-Terminal-Bench y DeepSWE, `mantenimiento` mira CursorBench y DeepSWE. Esa pregunta, la de si
-Terminal-Bench mide el trabajo de arreglar bugs, sí se puede contestar. Está en
-[`convex/scoring/config.ts`](convex/scoring/config.ts).
+Lo único que se decide es **cuáles entran**, y eso se decide encendiendo y apagando fuentes en
+[`convex/scoring/config.ts`](convex/scoring/config.ts), no en un control de la web.
+
+Aquí hubo perfiles de tarea, que repartían los benchmarks según si ibas a arreglar bugs o a dejar
+un agente suelto. Se quitaron porque eran el mismo pecado con otra cara: afirmar que Terminal-Bench
+mide el trabajo sin supervisión y CursorBench no es una opinión sin medir, tan indefendible como
+decir que uno vale 0.35 y otro 0.30. Un control que reparte los benchmarks por corazonada da tres
+respuestas distintas y ninguna razón para preferir una.
+
+Una fuente se puede **apagar desde la web** si tiene un agujero de cobertura conocido, y solo por
+eso. Hoy es el caso de CursorBench: Cursor ya no puede correr los modelos de OpenAI, así que sus
+cifras para esos modelos se quedan quietas mientras las del resto siguen. El motivo se escribe en
+el campo `sesgo` de la métrica en [`convex/scoring/config.ts`](convex/scoring/config.ts), y de ahí
+salen solos el interruptor de la portada, su explicación al pasar por encima y el párrafo de
+/metodologia. Sin `sesgo` no hay interruptor: un control sin motivo escrito es una invitación a
+mover la metodología hasta que dé la respuesta que uno quería.
 
 Para poder ser una respuesta hacen falta **dos benchmarks distintos**. Se cuentan fuentes y no
-fracciones de peso: con los pesos iguales, "la mitad de los pesos" sería *un solo* benchmark en un
-perfil que mira dos, justo lo que esa regla existe para impedir.
+fracciones de peso: con los pesos iguales, "la mitad de los pesos" sería *un solo* benchmark de los
+tres, justo lo que esa regla existe para impedir.
+
+Esa regla tiene una consecuencia incómoda que la web dice en voz alta en vez de esconder: **casi
+todo lo open weight la incumple**. DeepSWE mide unos cuantos modelos open weight, Terminal-Bench
+mide uno y CursorBench ninguno, así que se quedan con una sola fuente y no optan a las tarjetas. Se
+puntúan igual, se cuentan bajo el gráfico y están listados en
+[/metodologia](app/metodologia/page.tsx). Los
+números de esa sección se cuentan de los datos de hoy: el día que un benchmark empiece a medir
+modelos abiertos, la tabla lo dice sola.
+
+El umbral se puede **bajar a uno desde la portada** («para ser respuesta», o `?minimo=1`), y es lo único que
+deja entrar a esos modelos: elegir qué benchmarks cuentan no puede, porque apagar una fuente solo
+puede bajarle la cuenta a una variante, nunca subírsela. Bajarlo no cambia ninguna nota (los
+extremos de normalización salen del universo entero), solo quién puede ser respuesta, y lo que
+entra sale marcado como confianza baja en la fila y en las suplentes. Viene sin bajar porque la
+respuesta que se da sin tocar nada tiene que ser la defendible, y porque al aflojarlo se ve
+enseguida por qué: hoy los baratos con una sola medición aplastan el tramo intermedio y la
+respuesta del día a día se queda sin candidatos, que es exactamente lo que la regla evita. La
+portada lo dice en esa situación en vez de enseñar dos tarjetas sin explicación.
 
 ## Cómo está montado
 
@@ -119,7 +149,7 @@ convex/
                  y una línea en registry.ts
   matching/      de "Fable 5.1 Max" al modelo del catálogo. Lo que no resuelve
                  cae en unresolvedKeys con su sugerencia; nunca se adivina
-  scoring/       config.ts (qué benchmarks entran y en qué perfil),
+  scoring/       config.ts (qué benchmarks entran y cuánto pesan),
                  compute.ts (calidad y costo), tiers.ts (frontier, codo,
                  las tres reglas)
   ingest/        orquestador, snapshots con hash, bitácora de corridas
@@ -132,7 +162,7 @@ Las observaciones se guardan en formato largo (`sourceId`, `variante`, `métrica
 que **cambiar la metodología nunca requiere volver a descargar nada**: se recalcula sobre lo que
 ya hay.
 
-La metodología completa está en [/metodologia](app/metodologia/page.tsx) y los perfiles en
+La metodología completa está en [/metodologia](app/metodologia/page.tsx) y los umbrales en
 [`convex/scoring/config.ts`](convex/scoring/config.ts). Si una recomendación sorprende, ahí es
 donde hay que discutir.
 
@@ -142,10 +172,11 @@ donde hay que discutir.
 pnpm test
 ```
 
-59 tests contra fixtures reales capturados de cada fuente (`tests/fixtures/`). Cubren los
+61 tests contra fixtures reales capturados de cada fuente (`tests/fixtures/`). Cubren los
 parsers, la resolución de nombres y las propiedades del scoring: que nunca se recomiende una
 variante dominada, que las tres respuestas sean siempre tres modelos distintos y en orden de
-precio, y que dos modelos con intervalos solapados se desempaten por costo.
+precio, que dos modelos con intervalos solapados se desempaten por costo, y que bajar el mínimo de
+benchmarks solo añada candidatos, nunca quite, y los añada marcados.
 
 Un cambio de maquetación río arriba rompe un test, no la producción.
 
@@ -153,8 +184,7 @@ Un cambio de maquetación río arriba rompe un test, no la producción.
 npx vite-node scripts/preview-recomendaciones.ts
 ```
 
-Corre el pipeline entero sobre los fixtures e imprime las tres tarjetas en la terminal. Acepta un
-perfil: `general`, `mantenimiento`, `agentico`.
+Corre el pipeline entero sobre los fixtures e imprime las tres tarjetas en la terminal.
 
 ```bash
 npx vite-node scripts/diagnose-matching.ts

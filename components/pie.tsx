@@ -28,7 +28,7 @@ export async function Pie() {
               {i < activas.length - 1 ? ", " : ""}
             </span>
           ))}
-          . Cada uno mantiene su propio benchmark; aquí solo se cruzan.
+          .
         </p>
         <p>
           <Link href="/creditos" className="underline-offset-4 hover:underline">

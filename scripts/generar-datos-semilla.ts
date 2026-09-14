@@ -15,16 +15,12 @@ import { parse as cursorBench } from "../convex/sources/cursorBench";
 import { parse as deepSwe } from "../convex/sources/deepSwe";
 import { parse as terminalBench } from "../convex/sources/terminalBench";
 import { buildCandidates } from "../convex/scoring/candidates";
-import { scoreAll, type Scored } from "../convex/scoring/compute";
-import { elegibles, elegirTarjetas, paretoFrontier } from "../convex/scoring/tiers";
 import {
-  METRICAS_ACTIVAS,
   METRIC_CONFIG,
-  PERFILES,
   THRESHOLDS,
   TOKEN_MIX,
-  pesosDelPerfil,
-  type PerfilId,
+  fuenteDeMetrica,
+  pesosIguales,
 } from "../convex/scoring/config";
 import { SOURCES } from "../convex/sources/registry";
 import type { Metric } from "../convex/sources/types";
@@ -44,69 +40,6 @@ const { candidates } = buildCandidates(catalogo, [
 ]);
 
 const porModelo = new Map(catalogo.map((c) => [c.modelKey, c]));
-
-const aTarjeta = (s: Scored) => ({
-  variantKey: s.variantKey,
-  modelKey: s.modelKey,
-  modelName: s.modelName,
-  creator: s.creator,
-  effort: s.effort,
-  quality: Math.round(s.quality * 10) / 10,
-  qualityLo: Math.round(s.qualityLo * 10) / 10,
-  qualityHi: Math.round(s.qualityHi * 10) / 10,
-  coverage: Math.round(s.coverage * 100) / 100,
-    benchmarks: s.benchmarks,
-  confidence: s.confidence,
-  cost: s.cost !== undefined ? Math.round(s.cost * 100) / 100 : undefined,
-  costMeasured: s.costMeasured,
-  costLo: s.costLo,
-  costHi: s.costHi,
-  blendedPrice: s.blendedPrice,
-  openWeights: s.openWeights,
-  providers: s.providers,
-  programmingRank: s.programmingRank,
-  metricas: s.metricBreakdown.map((m) => ({
-    metric: m.metric,
-    etiqueta: METRIC_CONFIG[m.metric].label,
-    valor: Math.round(m.value * 1000) / 10,
-    peso: Math.round(m.weight * 100) / 100,
-  })),
-});
-
-const perfiles: PerfilId[] = ["general", "mantenimiento", "agentico"];
-const porPerfil: Record<string, unknown> = {};
-const elegiblesPorPerfil: Record<string, unknown> = {};
-
-for (const perfil of perfiles) {
-  const puntuados = scoreAll(candidates, perfil);
-  const pool = elegibles(puntuados);
-  const frontera = paretoFrontier(pool);
-
-  porPerfil[perfil] = {
-    perfil,
-    perfilEtiqueta: PERFILES[perfil].label,
-    actualizado: Date.now(),
-    totales: {
-      candidatos: candidates.length,
-      elegibles: pool.length,
-      enFrontera: frontera.length,
-    },
-    tarjetas: elegirTarjetas(puntuados).map((t) => ({
-      tier: t.tier,
-      razon: t.razon,
-      razonCorta: t.razonCorta,
-      ganador: aTarjeta(t.ganador),
-      alternativas: t.alternativas.map(aTarjeta),
-    })),
-    frontera: frontera.sort((a, b) => b.quality - a.quality).map(aTarjeta),
-  };
-
-  // El conjunto entero de candidatas con datos suficientes, no solo la
-  // frontera: sin él, la web en modo semilla no puede volver a elegir las tres
-  // respuestas cuando alguien pone un techo, y acabaría borrando filas en vez
-  // de contestar la pregunta.
-  elegiblesPorPerfil[perfil] = pool.sort((a, b) => b.quality - a.quality).map(aTarjeta);
-}
 
 const modelos = Object.fromEntries(
   [...new Set(candidates.map((c) => c.modelKey))].map((key) => {
@@ -138,16 +71,14 @@ const metodologia = {
     .map(([metric, c]) => ({
       metric,
       etiqueta: c.label,
-      peso: pesosDelPerfil("general")[metric as Metric],
+      fuente: fuenteDeMetrica(metric as Metric),
+      peso: pesosIguales()[metric as Metric],
       vidaMediaMeses: c.halfLifeMonths,
+      sesgo: c.sesgo,
     })),
-    perfiles: Object.entries(PERFILES).map(([id, p]) => ({
-    id,
-    etiqueta: p.label,
-    mide: (p.mide ?? METRICAS_ACTIVAS()).map((m) => METRIC_CONFIG[m].label),
-  })),
   umbrales: {
     benchmarksMinimos: THRESHOLDS.benchmarksMinimos,
+    benchmarksMinimosSuelo: THRESHOLDS.benchmarksMinimosSuelo,
     pisoCalidadBarato: THRESHOLDS.pisoCalidadBarato,
     pisoCalidadDiaADia: THRESHOLDS.pisoCalidadDiaADia,
     percentilCostoBarato: THRESHOLDS.percentilCostoBarato,
@@ -174,15 +105,17 @@ const salida = `// GENERADO POR scripts/generar-datos-semilla.ts. No editar a ma
 //
 // Regenerar:  npx vite-node scripts/generar-datos-semilla.ts
 
-import type { Metodologia, Modelo, PerfilId, Recomendaciones, Variante } from "./types";
+import type { Candidate } from "../convex/scoring/compute";
+import type { Metodologia, Modelo } from "./types";
 
 export const CAPTURADO_EL = ${JSON.stringify(new Date().toISOString().slice(0, 10))};
 
-export const RECOMENDACIONES_SEMILLA: Record<PerfilId, Recomendaciones> =
-  ${JSON.stringify(porPerfil)};
-
-export const ELEGIBLES_SEMILLA: Record<PerfilId, Variante[]> =
-  ${JSON.stringify(elegiblesPorPerfil)};
+// Los candidatos crudos, no un resultado ya calculado: la web sin Convex corre
+// el mismo pipeline sobre ellos que corre el servidor. Guardar el resultado
+// obligaba a precomputar una copia por cada combinación de filtros, y cualquier
+// filtro nuevo dejaba el modo semilla enseñando otra cosa que producción.
+export const CANDIDATOS_SEMILLA: Candidate[] =
+  ${JSON.stringify(candidates)};
 
 export const MODELOS_SEMILLA: Record<string, Modelo> = ${JSON.stringify(modelos)};
 
@@ -191,6 +124,5 @@ export const METODOLOGIA_SEMILLA: Metodologia = ${JSON.stringify(metodologia)};
 
 writeFileSync("lib/datos-semilla.ts", salida);
 console.log(
-  `lib/datos-semilla.ts: ${perfiles.length} perfiles, ${Object.keys(modelos).length} modelos, ` +
-    `${candidates.length} variantes`,
+  `lib/datos-semilla.ts: ${Object.keys(modelos).length} modelos, ${candidates.length} variantes`,
 );
