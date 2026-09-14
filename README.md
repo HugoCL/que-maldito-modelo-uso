@@ -207,6 +207,13 @@ app/, components/, lib/   Next.js App Router + shadcn/ui, copy en lib/i18n/es.ts
 tests/, scripts/          tests contra fixtures reales y herramientas de diagnóstico
 ```
 
+El icono tampoco es un archivo: `app/icon.tsx` y `app/apple-icon.tsx` lo dibujan en el build con
+`ImageResponse`, a partir de la marca de [`lib/marca.tsx`](lib/marca.tsx). Es el asterisco de la
+censura del nombre, con una barra por respuesta y el color de su tarjeta, así que el día que cambie
+la paleta el icono cambia con ella en vez de quedarse enseñando la del año pasado. No lleva texto a
+propósito: Satori exige una fuente en cuanto hay una letra, y sin ninguna el icono no se puede
+romper porque una fuente no esté disponible al construir.
+
 Las observaciones se guardan en formato largo (`sourceId`, `variante`, `métrica`, `valor`), así
 que **cambiar la metodología nunca requiere volver a descargar nada**: se recalcula sobre lo que
 ya hay.
