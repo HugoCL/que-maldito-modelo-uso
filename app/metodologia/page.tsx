@@ -1,5 +1,10 @@
 import Link from "next/link";
-import { obtenerEscala, obtenerMetodologia, obtenerVariantes } from "@/lib/datos";
+import {
+  obtenerEscala,
+  obtenerMetodologia,
+  obtenerRecomendaciones,
+  obtenerVariantes,
+} from "@/lib/datos";
 import { es } from "@/lib/i18n/es";
 import type { MetricaDeVariante, Variante } from "@/lib/types";
 
@@ -18,11 +23,18 @@ const conSigno = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n
  * que alguien abre cuando ya desconfía.
  */
 export default async function Metodologia() {
-  const [{ metricas, umbrales, mezclaDeTokens, fuentes }, variantes, escala] = await Promise.all([
-    obtenerMetodologia(),
-    obtenerVariantes(),
-    obtenerEscala(),
-  ]);
+  const [{ metricas, umbrales, mezclaDeTokens, fuentes }, variantes, escala, recomendaciones] =
+    await Promise.all([
+      obtenerMetodologia(),
+      obtenerVariantes(),
+      obtenerEscala(),
+      obtenerRecomendaciones(),
+    ]);
+
+  // Lo que esta página dice sobre el día a día tiene que cuadrar con lo que se
+  // ve en la portada hoy, sin filtros. Escribirlo a mano sería exactamente lo
+  // que esta página no hace.
+  const hoy = recomendaciones.tarjetas.find((t) => t.tier === "dia_a_dia");
 
   const effort = ejemploDeEffort(variantes);
   const banda = ejemploDeBanda(variantes);
@@ -336,9 +348,48 @@ export default async function Metodologia() {
           </li>
         </ul>
         <p>
-          Las tres tienen que ser tres modelos distintos y en orden de precio. Cuando no hay datos
-          para las tres, salen dos: repetir el mismo modelo en dos tarjetas sería fingir una
-          elección que no existe.
+          Las tres salen siempre en orden de precio, y casi siempre son tres modelos distintos.
+          Cuando el codo cae <em>exactamente</em> en el barato o en el mejor, la tarjeta del día a
+          día repite ese modelo y lo dice en la propia fila. Aquí hubo una regla que lo prohibía, y
+          estaba mal: lo que hacía era borrar la tarjeta y dejar a la página diciendo que faltaban
+          datos cuando lo que pasaba era otra cosa. «El barato es también el que dejarías puesto» es
+          una respuesta, y de las útiles.
+        </p>
+      </Seccion>
+
+      <Seccion titulo="Cuándo no hay respuesta para el día a día" id="sin-dia-a-dia">
+        <p>
+          Es la única de las tres que se define en relación con las otras dos: el mejor es el mejor y
+          el barato es el mejor de los baratos, pero el del día a día tiene que caer <em>entre</em>{" "}
+          ambos. Cuando los filtros recortan mucho el conjunto, a veces no queda sitio. Pasa por tres
+          motivos, y la página principal dice cuál de los tres en vez de contarlos todos como falta
+          de datos:
+        </p>
+        <ul className="flex list-disc flex-col gap-2 pl-5">
+          <li>
+            <strong>No hay tres intercambios.</strong> Después de descartar lo dominado quedan uno o
+            dos modelos. No es que falte un dato: es que con ese filtro no hay tres decisiones
+            distintas que tomar.
+          </li>
+          <li>
+            <strong>No hay codo.</strong> Todo lo intermedio rinde peor que interpolar entre el
+            barato y el mejor, así que ningún escalón de en medio compensa. La curva sube pareja y lo
+            razonable es quedarse en un extremo.
+          </li>
+          <li>
+            <strong>Lo de en medio no llega al piso.</strong> Hay un modelo en el hueco pero no
+            alcanza el <Cifra>{pct(umbrales.pisoCalidadDiaADia)}</Cifra> de la calidad del líder. La
+            página dice por cuánto se queda. El piso no se mueve para que salga la respuesta que uno
+            quería, que es el mismo argumento por el que aquí no hay perfiles de tarea; pero el
+            número se enseña para poder discutirlo.
+          </li>
+        </ul>
+        <p className="text-[13px] leading-[1.55] text-muted-foreground">
+          {hoy
+            ? hoy.repiteA
+              ? `Hoy, sin filtros, la del día a día recomienda el mismo modelo que la de «${es.tiers[hoy.repiteA].etiqueta}».`
+              : "Hoy, sin filtros, las tres respuestas son tres modelos distintos."
+            : "Hoy, sin filtros, no hay respuesta para el día a día."}
         </p>
       </Seccion>
 

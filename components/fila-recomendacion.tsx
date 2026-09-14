@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { es } from "@/lib/i18n/es";
 import { cn } from "@/lib/utils";
-import type { Tarjeta } from "@/lib/types";
+import type { Tarjeta, Tier } from "@/lib/types";
 
 /**
  * Una respuesta es una fila, no una tarjeta.
@@ -33,7 +33,7 @@ const COLOR = {
 } as const;
 
 export function FilaRecomendacion({ tarjeta, sin }: { tarjeta: Tarjeta; sin?: string }) {
-  const { tier, ganador, razonCorta, alternativas } = tarjeta;
+  const { tier, ganador, razonCorta, alternativas, repiteA } = tarjeta;
   // Las fuentes apagadas viajan con el enlace: si no, la ficha puntuaría con
   // todas y enseñaría una calidad distinta de la que acaba de leerse aquí.
   const ficha = (modelKey: string) => (sin ? `/modelo/${modelKey}?sin=${sin}` : `/modelo/${modelKey}`);
@@ -98,6 +98,7 @@ export function FilaRecomendacion({ tarjeta, sin }: { tarjeta: Tarjeta; sin?: st
               {ganador.effort}
             </span>
           ) : null}
+          {repiteA ? <Repite tier={repiteA} /> : null}
           {ganador.confidence === "baja" ? <Baja /> : null}
         </p>
         <p
@@ -157,6 +158,27 @@ export function FilaRecomendacion({ tarjeta, sin }: { tarjeta: Tarjeta; sin?: st
         </span>
       </div>
     </div>
+  );
+}
+
+/**
+ * La marca de una tarjeta que recomienda el mismo modelo que otra.
+ *
+ * Sin ella, dos filas con el mismo nombre se leen como un error de la web. Con
+ * ella son lo que de verdad son: el codo de la curva cae en un modelo que ya
+ * tiene tarjeta, así que ese modelo responde a las dos preguntas.
+ *
+ * El mismo borde punteado que `Baja` y por el mismo motivo: no es una alarma,
+ * es una aclaración.
+ */
+function Repite({ tier }: { tier: Tier }) {
+  return (
+    <span
+      title={es.tarjeta.repiteNota}
+      className="ml-2 shrink-0 rounded border border-dashed px-1.5 py-px align-middle font-mono text-[10.5px] font-normal whitespace-nowrap text-muted-foreground"
+    >
+      {es.tarjeta.repite[tier]}
+    </span>
   );
 }
 

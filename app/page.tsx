@@ -23,6 +23,7 @@ import {
 } from "@/lib/datos";
 import { es } from "@/lib/i18n/es";
 import { hace } from "@/lib/tiempo";
+import type { Recomendaciones } from "@/lib/types";
 
 export default async function Inicio({
   searchParams,
@@ -196,7 +197,15 @@ async function Respuestas({ params }: { params: ParamsPortada }) {
         </div>
       </div>
 
-      {tarjetas.length < 3 ? (
+      {/* Por qué falta la del día a día, dicho con su motivo y no con un «no hay
+          datos» que casi nunca era verdad. Cuando falta otra tarjeta distinta,
+          o cuando se ha bajado el mínimo a mano, siguen valiendo las frases de
+          antes: son otra cosa. */}
+      {datos.sinDiaADia ? (
+        <p className="font-mono text-[11.5px] leading-[1.6] text-muted-foreground">
+          {motivoSinDiaADia(datos.sinDiaADia)}
+        </p>
+      ) : tarjetas.length < 3 ? (
         <p className="font-mono text-[11.5px] leading-[1.6] text-muted-foreground">
           {minimo !== undefined && minimo < metodologia.umbrales.benchmarksMinimos
             ? es.portada.faltanRespuestasConUno
@@ -226,6 +235,19 @@ async function Respuestas({ params }: { params: ParamsPortada }) {
       </p>
     </>
   );
+}
+
+/** La frase que le toca a cada motivo, con sus cifras. */
+function motivoSinDiaADia(motivo: NonNullable<Recomendaciones["sinDiaADia"]>): string {
+  const f = es.portada.sinDiaADia;
+  switch (motivo.tipo) {
+    case "frontera_corta":
+      return f.fronteraCorta(motivo.puntos);
+    case "bajo_el_piso":
+      return f.bajoElPiso(motivo.mejor.toFixed(0), motivo.piso.toFixed(0));
+    case "sin_codo":
+      return f.sinCodo;
+  }
 }
 
 function EsqueletoBarra() {

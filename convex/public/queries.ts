@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { query } from "../_generated/server";
 import { candidatosDesdeLaBase } from "../scoring/recompute";
 import { construirEscala, escalaPublica, scoreAll } from "../scoring/compute";
-import { elegibles, elegirTarjetas, paretoFrontier } from "../scoring/tiers";
+import { elegibles, paretoFrontier, seleccionarRespuestas } from "../scoring/tiers";
 import { aTarjeta } from "../scoring/presentar";
 import {
   METRIC_CONFIG,
@@ -62,7 +62,7 @@ export const recomendaciones = query({
     const filtrados = aplicarFiltrosDeCatalogo(puntuados, args);
     const minimo = minimoDeBenchmarks(args.minimo);
 
-    const tarjetas = elegirTarjetas(filtrados, minimo);
+    const { tarjetas, sinDiaADia } = seleccionarRespuestas(filtrados, minimo);
     const pool = elegibles(filtrados, minimo);
     const enFrontera = new Set(paretoFrontier(pool));
 
@@ -93,7 +93,9 @@ export const recomendaciones = query({
         razonCorta: t.razonCorta,
         ganador: aTarjeta(t.ganador),
         alternativas: t.alternativas.map(aTarjeta),
+        repiteA: t.repiteA,
       })),
+      sinDiaADia,
       // El conjunto elegible entero, no solo la frontera. El gráfico dibuja
       // los dos: la frontera es una línea que se entiende mucho mejor cuando
       // se ve contra lo que dejó atrás.

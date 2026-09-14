@@ -170,6 +170,26 @@ enseguida por qué: hoy los baratos con una sola medición aplastan el tramo int
 respuesta del día a día se queda sin candidatos, que es exactamente lo que la regla evita. La
 portada lo dice en esa situación en vez de enseñar dos tarjetas sin explicación.
 
+## La tarjeta que a veces falta
+
+«Día a día» es la única de las tres que se define **en relación con las otras dos**: el mejor es el
+mejor y el barato es el mejor de los baratos, pero el del día a día tiene que caer *entre* ambos.
+Cuando un filtro recorta el conjunto, a menudo no queda sitio, y la web enseñaba dos tarjetas
+diciendo «no hay datos» —que casi nunca era verdad: datos había de sobra—.
+
+Ahora pasan dos cosas. Cuando el codo cae **exactamente** en el barato o en el mejor, esa es la
+respuesta del día a día y la tarjeta sale repitiendo ese modelo, marcada en la propia fila: *el
+barato es también el que dejarías puesto* es una respuesta, y de las útiles. El repliegue solo actúa
+cuando no hay un tercer modelo, así que no puede robarle la tarjeta a nadie; y exige un codo de
+verdad, interior de la curva y por encima de la cuerda, porque el punto más barato tiene exceso cero
+por construcción y si no se colaría siempre.
+
+Y cuando de verdad no hay respuesta, se dice **cuál** de los tres motivos es: no quedan tres
+intercambios distintos, no hay codo (todo lo de en medio rinde peor que quedarse en un extremo), o
+lo que hay en medio no llega al piso de calidad, y entonces se enseña por cuánto se queda. El piso
+no se mueve para que salga la respuesta que uno quería —el mismo argumento por el que aquí no hay
+perfiles de tarea— pero el número se publica para poder discutirlo.
+
 ## Cómo está montado
 
 ```
@@ -203,9 +223,14 @@ pnpm test
 
 80 tests contra fixtures reales capturados de cada fuente (`tests/fixtures/`). Cubren los
 parsers, la resolución de nombres y las propiedades del scoring: que nunca se recomiende una
-variante dominada, que las tres respuestas sean siempre tres modelos distintos y en orden de
-precio, que dos modelos con intervalos solapados se desempaten por costo, y que bajar el mínimo de
-benchmarks solo añada candidatos, nunca quite, y los añada marcados.
+variante dominada, que las tres respuestas salgan siempre en orden de precio, que dos modelos con
+intervalos solapados se desempaten por costo, y que bajar el mínimo de benchmarks solo añada
+candidatos, nunca quite, y los añada marcados.
+
+Y las de la tarjeta que falta: que haya respuesta para el día a día **si y solo si** no hay motivo
+para que falte, que un modelo repetido en dos tarjetas venga siempre marcado y que la marca apunte
+de verdad a la otra, y que ni el extremo de la curva ni un punto por debajo de la cuerda se cuelen
+como codo.
 
 Y las de la escala común, que son las que impiden que vuelva a colarse lo de antes: que nivelar
 deje a cada benchmark sin residuo sobre los modelos que mide, que la calidad media no baje al subir

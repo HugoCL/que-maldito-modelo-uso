@@ -6,7 +6,7 @@ import { metricasExcluidas, minimoDeBenchmarks } from "../convex/scoring/config"
 import { construirEscala, escalaPublica, scoreAll } from "../convex/scoring/compute";
 import { aplicarFiltrosDeCatalogo } from "../convex/scoring/filtros";
 import { aTarjeta } from "../convex/scoring/presentar";
-import { elegibles, elegirTarjetas, paretoFrontier } from "../convex/scoring/tiers";
+import { elegibles, paretoFrontier, seleccionarRespuestas } from "../convex/scoring/tiers";
 import {
   CANDIDATOS_SEMILLA,
   CAPTURADO_EL,
@@ -120,6 +120,7 @@ function sobreLaSemilla(filtros: FiltrosDeRecomendacion): Recomendaciones {
   const minimo = minimoDeBenchmarks(filtros.minimo);
   const pool = elegibles(filtrados, minimo);
   const enFrontera = new Set(paretoFrontier(pool));
+  const { tarjetas, sinDiaADia } = seleccionarRespuestas(filtrados, minimo);
 
   return {
     actualizado: null,
@@ -129,13 +130,15 @@ function sobreLaSemilla(filtros: FiltrosDeRecomendacion): Recomendaciones {
       enFrontera: enFrontera.size,
       unaFuente: filtrados.filter((s) => s.benchmarks > 0 && s.benchmarks < minimo).length,
     },
-    tarjetas: elegirTarjetas(filtrados, minimo).map((t) => ({
+    tarjetas: tarjetas.map((t) => ({
       tier: t.tier,
       razon: t.razon,
       razonCorta: t.razonCorta,
       ganador: aTarjeta(t.ganador),
       alternativas: t.alternativas.map(aTarjeta),
+      repiteA: t.repiteA,
     })),
+    sinDiaADia,
     elegibles: [...pool]
       .sort((a, b) => b.quality - a.quality)
       .map((s) => ({ ...aTarjeta(s), enFrontera: enFrontera.has(s) })),

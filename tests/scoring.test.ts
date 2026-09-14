@@ -27,7 +27,10 @@ import {
   empatanEstadisticamente,
   excesoSobreLaCuerda,
   paretoFrontier,
+  seleccionarRespuestas,
+  type Recomendacion,
 } from "../convex/scoring/tiers";
+import { aplicarFiltrosDeCatalogo } from "../convex/scoring/filtros";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (f: string) => readFileSync(join(here, "fixtures", f), "utf8");
@@ -56,9 +59,53 @@ test("el pipeline produce las tres tarjetas", () => {
   );
 });
 
+/**
+ * Las respuestas son modelos distintos, salvo cuando el codo de la curva cae
+ * exactamente en el barato o en el mejor. Entonces la del día a día repite ese
+ * modelo —porque esa ES la respuesta— y tiene que venir marcada con `repiteA`
+ * apuntando a la tarjeta con la que coincide. Repetir sin marcar sí sería un
+ * error: dos filas con el mismo nombre y sin explicación se leen como un fallo.
+ */
+function comprobarRepeticiones(rs: Array<Recomendacion<Scored>>) {
+  // Y al revés: una tarjeta marcada como repetida tiene que repetir de verdad.
+  // Marcar de más es tan mentira como marcar de menos, y sin esto una marca
+  // suelta en una tarjeta que no repite nada no la caza nadie.
+  for (const t of rs) {
+    if (!t.repiteA) continue;
+    assert.equal(t.tier, "dia_a_dia", `solo la del día a día puede repetir, y repite ${t.tier}`);
+    const otra = rs.find((x) => x.tier === t.repiteA);
+    assert.ok(otra, `${t.tier} dice repetir a "${t.repiteA}", que no existe`);
+    assert.equal(
+      otra.ganador.variantKey,
+      t.ganador.variantKey,
+      `${t.tier} dice repetir a "${t.repiteA}" y son modelos distintos`,
+    );
+  }
+
+  const porClave = new Map<string, string[]>();
+  for (const t of rs) {
+    porClave.set(t.ganador.variantKey, [...(porClave.get(t.ganador.variantKey) ?? []), t.tier]);
+  }
+  for (const [clave, tiers] of porClave) {
+    if (tiers.length === 1) continue;
+    assert.equal(tiers.length, 2, `${clave} sale en ${tiers.length} tarjetas: ${tiers.join(", ")}`);
+    const dia = rs.find((t) => t.tier === "dia_a_dia" && t.ganador.variantKey === clave);
+    assert.ok(dia, `${clave} se repite y ninguna de las dos es la del día a día`);
+    assert.ok(dia.repiteA, `${clave} se repite y la tarjeta del día a día no viene marcada`);
+    assert.ok(
+      tiers.includes(dia.repiteA),
+      `repiteA dice "${dia.repiteA}" y la otra tarjeta es "${tiers.find((x) => x !== "dia_a_dia")}"`,
+    );
+  }
+}
+
 test("las tres respuestas son tres modelos distintos", () => {
   const ganadores = tarjetas.map((t) => t.ganador.variantKey);
   assert.equal(new Set(ganadores).size, 3);
+  assert.ok(
+    tarjetas.every((t) => t.repiteA === undefined),
+    "sin filtros hay un tercer modelo, así que ninguna tarjeta debería repetir",
+  );
 });
 
 test("nunca se recomienda una variante dominada", () => {
@@ -100,9 +147,8 @@ test("las alternativas no repiten al ganador ni a las otras tarjetas", () => {
 // Si no puedes usar el recomendado, lo que necesitas es otra respuesta a la
 // MISMA pregunta. Una suplente de "barato" que cueste más que el ganador de
 // "día a día" no lo es.
-test("las tres respuestas nunca son el mismo modelo", () => {
-  const claves = tarjetas.map((t) => t.ganador.variantKey);
-  assert.equal(new Set(claves).size, claves.length, `tarjetas repetidas: ${claves.join(", ")}`);
+test("un modelo repetido en dos tarjetas siempre viene marcado", () => {
+  comprobarRepeticiones(tarjetas);
 });
 
 test("las razones citan números reales, no plantillas vacías", () => {
@@ -553,6 +599,134 @@ test("la calibración no la pone media docena de modelos caros", () => {
 
   const factor = calibrateCostFactor([...tipicos, ...caros], {})!;
   assert.ok(Math.abs(factor - 2) < 1e-9, `el factor se fue a ${factor} en vez de 2`);
+});
+
+// ─── cuando no hay tercer modelo ──────────────────────────────────────────
+
+/** Una variante de mentira, con lo justo para que la elección funcione. */
+const punto = (modelName: string, cost: number, quality: number): Scored =>
+  ({
+    variantKey: modelName,
+    modelKey: modelName,
+    modelName,
+    effort: "default",
+    quality,
+    qualityLo: quality,
+    qualityHi: quality,
+    benchmarks: 2,
+    cost,
+  }) as Scored;
+
+/**
+ * El repliegue: si el codo cae justo en el modelo barato, esa es la respuesta
+ * del día a día aunque repita tarjeta. Antes desaparecía y la web decía «no hay
+ * datos», que era falso: datos había, y la respuesta también.
+ */
+test("cuando el codo es el modelo barato, la tarjeta sale marcada", () => {
+  // Sin nada entre el barato y el mejor: el salto grande está en el barato.
+  const universo = [punto("flojo", 1, 40), punto("codo", 2, 85), punto("mejor", 8, 100)];
+  const { tarjetas: t, sinDiaADia } = seleccionarRespuestas(universo);
+
+  const dia = t.find((x) => x.tier === "dia_a_dia");
+  assert.ok(dia, "debería salir la tarjeta del día a día");
+  assert.equal(dia.ganador.modelName, "codo");
+  assert.equal(dia.repiteA, "barato");
+  assert.equal(t.find((x) => x.tier === "barato")?.ganador.modelName, "codo");
+  assert.equal(sinDiaADia, undefined, "si hay tarjeta no puede haber motivo");
+
+  comprobarRepeticiones(t);
+  // La razón tiene que explicar la repetición, no repetir la del barato.
+  assert.match(dia.razon, /\$\d/);
+  assert.ok(dia.razon.length > 40);
+  assert.ok(dia.razonCorta.length <= 80, "la razón corta no cabe en una línea");
+  assert.notEqual(dia.razonCorta, t.find((x) => x.tier === "barato")!.razonCorta);
+});
+
+/**
+ * El punto más barato de la curva tiene exceso cero por construcción, así que
+ * sin exigir que el codo sea interior el extremo se colaría siempre y diríamos
+ * «lo que compensa es lo más barato», que es lo que ya dice la tarjeta de al
+ * lado. Aquí el barato es interior pero está POR DEBAJO de la cuerda: no es un
+ * codo y no puede repetir.
+ */
+test("un extremo, o algo por debajo de la cuerda, no se cuela como codo", () => {
+  const universo = [punto("flojo", 1, 70), punto("plano", 2, 72), punto("mejor", 8, 100)];
+  const { tarjetas: t, sinDiaADia } = seleccionarRespuestas(universo);
+
+  assert.equal(t.find((x) => x.tier === "dia_a_dia"), undefined);
+  assert.equal(t.find((x) => x.tier === "barato")?.ganador.modelName, "plano");
+  assert.deepEqual(sinDiaADia, { tipo: "sin_codo" });
+});
+
+test("con menos de tres intercambios se dice cuántos hay", () => {
+  const { tarjetas: t, sinDiaADia } = seleccionarRespuestas([
+    punto("flojo", 1, 70),
+    punto("mejor", 8, 100),
+  ]);
+  assert.equal(t.find((x) => x.tier === "dia_a_dia"), undefined);
+  assert.deepEqual(sinDiaADia, { tipo: "frontera_corta", puntos: 2 });
+});
+
+/**
+ * El caso que más rabia da: hay un modelo justo en medio y se queda a un punto
+ * del piso. El piso no se toca —aflojarlo hasta que salga la respuesta que uno
+ * quería es lo que este repo dice no hacer— pero la cifra se enseña para poder
+ * discutirlo con el número delante.
+ */
+test("cuando lo de en medio no llega al piso, se dice por cuánto", () => {
+  const universo = [
+    punto("flojo", 1, 62),
+    punto("barato", 2, 70),
+    punto("casi", 4, 74),
+    punto("mejor", 8, 100),
+  ];
+  const { tarjetas: t, sinDiaADia } = seleccionarRespuestas(universo);
+
+  assert.equal(t.find((x) => x.tier === "dia_a_dia"), undefined);
+  assert.equal(sinDiaADia?.tipo, "bajo_el_piso");
+  assert.ok(sinDiaADia?.tipo === "bajo_el_piso" && sinDiaADia.mejor === 74);
+  assert.ok(sinDiaADia?.tipo === "bajo_el_piso" && sinDiaADia.piso === 75);
+});
+
+/**
+ * Barrido sobre los filtros de verdad. Dos invariantes que tienen que
+ * cumplirse siempre, y la comprobación de que las cuatro situaciones existen de
+ * verdad en los datos de hoy y no son código muerto.
+ */
+test("hay tarjeta del día a día si y solo si no hay motivo, en cualquier filtro", () => {
+  const vistos = new Set<string>();
+  let combinaciones = 0;
+
+  for (const familia of [undefined, "gpt", "claude", "gemini", "grok"]) {
+    for (const presupuestoMax of [undefined, 1, 3, 8]) {
+      for (const minimo of [2, 1]) {
+        for (const soloOpenWeights of [undefined, true]) {
+          const filtrados = aplicarFiltrosDeCatalogo(scored, {
+            familia,
+            presupuestoMax,
+            soloOpenWeights,
+          });
+          const { tarjetas: t, sinDiaADia } = seleccionarRespuestas(filtrados, minimo);
+          if (!t.length) continue;
+          combinaciones++;
+
+          const dia = t.find((x) => x.tier === "dia_a_dia");
+          assert.equal(
+            !!dia,
+            !sinDiaADia,
+            `familia=${familia} tope=${presupuestoMax} minimo=${minimo}: la tarjeta y el motivo no se excluyen`,
+          );
+          comprobarRepeticiones(t);
+          vistos.add(dia?.repiteA ? `repite:${dia.repiteA}` : (sinDiaADia?.tipo ?? "propio"));
+        }
+      }
+    }
+  }
+
+  assert.ok(combinaciones > 30, `solo se probaron ${combinaciones} combinaciones`);
+  for (const esperado of ["propio", "repite:barato", "frontera_corta", "sin_codo"]) {
+    assert.ok(vistos.has(esperado), `nunca se dio el caso "${esperado}": ${[...vistos].join(", ")}`);
+  }
 });
 
 // ─── casos límite ─────────────────────────────────────────────────────────

@@ -77,6 +77,16 @@ export const es = {
     confianzaBaja: "confianza baja",
     confianzaBajaNota:
       "Un solo benchmark ha medido esta variante: su nota es esa única medición, sin promedio que la contraste.",
+    // La marca de una tarjeta que recomienda el mismo modelo que otra. Dice a
+    // cuál repite, porque «también es el barato» y «también es el mejor» no
+    // significan lo mismo ni de lejos.
+    repite: {
+      barato: "también es el barato",
+      dia_a_dia: "también es el del día a día",
+      bueno: "también es el mejor",
+    },
+    repiteNota:
+      "El codo de la curva cae exactamente en este modelo, así que responde a las dos preguntas. No es un fallo: es que hoy no hay un escalón intermedio que compense.",
     medidoPor: "Medido por",
     disponibleEn: "Disponible en",
     pesosAbiertos: "Open Weight",
@@ -217,6 +227,19 @@ export const es = {
     sinAcceso: "Otras respuestas a esta misma pregunta, por si no puedes usar la recomendada",
     faltanRespuestas:
       "Con estos benchmarks no hay datos para las tres respuestas: solo salen las que se pueden defender.",
+    // Por qué falta la del día a día. Tres frases y no una: antes las tres
+    // situaciones se contaban como «no hay datos», y en dos de ellas había
+    // datos de sobra y lo que pasaba era otra cosa.
+    sinDiaADia: {
+      fronteraCorta: (puntos: number) =>
+        puntos === 1
+          ? "Con estos filtros solo queda un intercambio posible, y para tres respuestas hacen falta tres."
+          : `Con estos filtros solo quedan ${puntos} intercambios distintos, y para tres respuestas hacen falta tres.`,
+      sinCodo:
+        "Aquí no hay término medio que valga la pena: todo lo intermedio rinde peor que quedarse con el barato o irse al mejor.",
+      bajoElPiso: (mejor: string, piso: string) =>
+        `Lo que hay en medio se queda en ${mejor} de calidad y hacen falta ${piso} para poder recomendarlo. Está en el gráfico, pero no como respuesta.`,
+    },
     // Cuando faltan respuestas con el mínimo en uno el motivo es el contrario:
     // sobran candidatos baratos con una sola medición, y entre el más barato y
     // el mejor ya no queda tramo intermedio que recomendar. Decirlo importa,

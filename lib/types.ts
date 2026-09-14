@@ -59,7 +59,23 @@ export type Tarjeta = {
   ganador: Variante;
   /** Suplentes de esta misma tarjeta, de mejor a peor. Puede venir vacía. */
   alternativas: Variante[];
+  /**
+   * La otra tarjeta que recomienda este mismo modelo, cuando coinciden. Solo la
+   * lleva la del día a día, y la fila tiene que decirlo: dos filas con el mismo
+   * nombre y sin explicación se leen como un error.
+   */
+  repiteA?: Tier;
 };
+
+/**
+ * Por qué no hay tarjeta del día a día. Son tres cosas distintas y cada una se
+ * cuenta con su frase: la ausencia explicada es información, la ausencia a
+ * secas parece un agujero de datos.
+ */
+export type MotivoSinDiaADia =
+  | { tipo: "frontera_corta"; puntos: number }
+  | { tipo: "sin_codo" }
+  | { tipo: "bajo_el_piso"; mejor: number; piso: number };
 
 export type Recomendaciones = {
   actualizado: number | null;
@@ -71,6 +87,8 @@ export type Recomendaciones = {
     unaFuente: number;
   };
   tarjetas: Tarjeta[];
+  /** Vacío cuando sí hay respuesta para el día a día. */
+  sinDiaADia?: MotivoSinDiaADia;
   /** Todo lo que puede optar a una tarjeta, con la frontera marcada. */
   elegibles: Variante[];
 };
