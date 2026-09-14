@@ -188,7 +188,7 @@ async function Respuestas({ params }: { params: ParamsPortada }) {
               un índice no puede depender de tener ratón. */}
           <span>{es.portada.pieDeTabla(metodologia.metricas.filter((m) => !sin.includes(m.fuente)).length)}</span>
           <span className="hidden sm:block sm:text-right">{es.portada.calidad}</span>
-          <span className="opcion hidden sm:block sm:justify-end sm:text-right">
+          <span className="opcion encima hidden sm:block sm:justify-end sm:text-right">
             <Link href="/metodologia#indice" className="underline decoration-dotted underline-offset-4">
               {es.portada.porTarea}
             </Link>

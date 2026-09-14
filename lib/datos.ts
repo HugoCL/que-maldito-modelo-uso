@@ -2,7 +2,8 @@ import "server-only";
 import { cache } from "react";
 import { fetchQuery } from "convex/nextjs";
 import { makeFunctionReference } from "convex/server";
-import { metricasExcluidas, minimoDeBenchmarks } from "../convex/scoring/config";
+import { METRIC_CONFIG, metricasExcluidas, minimoDeBenchmarks } from "../convex/scoring/config";
+import type { Metric } from "../convex/sources/types";
 import { construirEscala, escalaPublica, scoreAll } from "../convex/scoring/compute";
 import { aplicarFiltrosDeCatalogo } from "../convex/scoring/filtros";
 import { aTarjeta } from "../convex/scoring/presentar";
@@ -165,7 +166,16 @@ export async function obtenerVariantes(sin?: string[]): Promise<Variante[]> {
 }
 
 export async function obtenerMetodologia(): Promise<Metodologia> {
-  return pedirAConvex(consultas.metodologia, {}, METODOLOGIA_SEMILLA);
+  const m = await pedirAConvex(consultas.metodologia, {}, METODOLOGIA_SEMILLA);
+  // El sesgo es copy de config.ts. Next lo tiene a mano, y así un arreglo de
+  // una frase no espera a que Convex acepte un push.
+  return {
+    ...m,
+    metricas: m.metricas.map((metrica) => {
+      const local = METRIC_CONFIG[metrica.metric as Metric];
+      return local ? { ...metrica, sesgo: local.sesgo } : metrica;
+    }),
+  };
 }
 
 /**

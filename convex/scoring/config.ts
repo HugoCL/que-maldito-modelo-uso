@@ -49,7 +49,7 @@ export const METRIC_CONFIG: Record<Metric, MetricConfig> = {
     activa: true,
     halfLifeMonths: null,
     sesgo:
-      "CursorBench ya no puede medir modelos de OpenAI, así que pon no cuenta si quieres evitar sesgos.",
+      "CursorBench ya no puede medir los modelos de OpenAI, así que pon «no cuenta» si quieres evitar ese sesgo.",
   },
   // Tareas largas en 91 repos, 4 corridas completas, con intervalos publicados.
   "deepswe.pass_at_1": { label: "DeepSWE v1.1", activa: true, halfLifeMonths: null },

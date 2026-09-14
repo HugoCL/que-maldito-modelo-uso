@@ -353,6 +353,15 @@
   left: auto;
 }
 
+/* El /tarea del pie de la tabla: si cuelga hacia abajo, overflow-hidden de
+   las esquinas redondas lo corta. Va encima, que es el único sitio con sitio. */
+.opcion.encima .ayuda {
+  top: auto;
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: 7px;
+}
+
 @media (hover: hover) and (min-width: 560px) {
   .opcion:hover .ayuda,
   .opcion:focus-within .ayuda,

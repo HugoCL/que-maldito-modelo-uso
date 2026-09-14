@@ -287,7 +287,7 @@ export default async function Metodologia() {
           tokens agéntica: <Cifra>{pct(mezclaDeTokens.cacheRead)}</Cifra> lecturas de caché,{" "}
           <Cifra>{pct(mezclaDeTokens.input)}</Cifra> entrada fresca y{" "}
           <Cifra>{pct(mezclaDeTokens.output)}</Cifra> salida. No es una suposición: sale del
-          desglose de tokens que publica DeepSWE por corrida. El clásico 3:1 entrada:salida se
+          desglose de tokens que publica DeepSWE por run. El clásico 3:1 entrada:salida se
           equivoca casi por un orden de magnitud en este tipo de carga. Todo lo estimado va marcado
           como tal.
         </p>
