@@ -60,14 +60,18 @@ export type MetricBreakdown = {
 export type Scored = Candidate & {
   quality: number;
   /**
-   * La media nivelada ya promediada con el centro, antes del último estirón.
+   * Los dos pasos que van de los benchmarks a la nota, publicados para que la
+   * ficha pueda enseñar la cuenta entera en vez de pedir que se crea.
    *
-   * Es el único paso de la nota que no se veía en ninguna parte: el desglose de
-   * la ficha llegaba hasta la media y la nota aparecía después sin nada en
-   * medio. Va en las unidades de los benchmarks nivelados, o sea las mismas que
-   * la media, para que la resta entre las dos signifique algo.
+   * `media` es la media de la columna nivelada; `acercada`, esa media ya
+   * promediada con el centro; `evidencia`, el peso con el que entra la media en
+   * ese promedio (el otro peso es `k`). Las tres primeras van en las unidades
+   * de los benchmarks nivelados, que no son las de la nota: el último estirón
+   * es justo el que cambia de escala.
    */
+  media: number;
   acercada: number;
+  evidencia: number;
   qualityLo: number;
   qualityHi: number;
   coverage: number;
@@ -563,9 +567,11 @@ export function scoreCandidate(
   return {
     ...c,
     quality: nivelada ? aNota(nivelada.mu, nivelada.evidencia, escala) : 0,
+    media: nivelada?.mu ?? escala.centro,
     acercada: nivelada
       ? encoger(nivelada.mu, nivelada.evidencia, escala.centro, escala.k)
       : escala.centro,
+    evidencia: nivelada?.evidencia ?? 0,
     qualityLo: nivelada ? aNota(nivelada.muLo, nivelada.evidencia, escala) : 0,
     qualityHi: nivelada ? aNota(nivelada.muHi, nivelada.evidencia, escala) : 0,
     coverage: nivelada?.coverage ?? 0,

@@ -35,13 +35,16 @@ export type Variante = {
   effort: string;
   quality: number;
   /**
-   * La media nivelada ya promediada con el centro del conjunto, en las unidades
-   * del desglose. Es el escalón que falta entre la media y la calidad.
+   * Los pasos intermedios de la nota, en las unidades del desglose: la media de
+   * la columna nivelada, esa media ya promediada con el centro, y el peso con
+   * el que entra en ese promedio. Con ellos la ficha enseña la cuenta entera.
    *
-   * Opcional porque un despliegue de Convex anterior a este campo no lo manda,
-   * y la ficha prefiere enseñar un paso menos a romperse.
+   * Opcionales porque un despliegue de Convex anterior a estos campos no los
+   * manda, y la ficha prefiere callarse a enseñar una cuenta a medias.
    */
+  media?: number;
   acercada?: number;
+  evidencia?: number;
   qualityLo: number;
   qualityHi: number;
   coverage: number;

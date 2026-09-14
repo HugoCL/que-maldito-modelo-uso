@@ -19,8 +19,13 @@ export function aTarjeta(s: Scored) {
     effort: s.effort,
     quality: Math.round(s.quality * 10) / 10,
     // En las unidades del desglose (los benchmarks nivelados), no en las de
-    // la calidad: es el paso que va de una escala a la otra.
+    // la calidad: el último paso es el que va de una escala a la otra.
+    media: Math.round(s.media * 1000) / 10,
     acercada: Math.round(s.acercada * 1000) / 10,
+    // Con dos decimales porque casi siempre es un entero —el número de
+    // benchmarks que te midieron— pero deja de serlo en cuanto uno está
+    // descontado por viejo, y entonces la cuenta solo cuadra con el decimal.
+    evidencia: Math.round(s.evidencia * 100) / 100,
     qualityLo: Math.round(s.qualityLo * 10) / 10,
     qualityHi: Math.round(s.qualityHi * 10) / 10,
     coverage: Math.round(s.coverage * 100) / 100,

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { fuentesApagadas } from "@/components/barra-de-filtros";
+import { CuentaDeLaNota } from "@/components/cuenta-de-la-nota";
 import { obtenerEscala, obtenerModelo, obtenerRecomendaciones } from "@/lib/datos";
 import { es } from "@/lib/i18n/es";
 import { cn } from "@/lib/utils";
@@ -27,18 +28,6 @@ const COLUMNAS = [
 
 /** Las cinco columnas del desglose: el benchmark y sus cuatro pasos. */
 const CUADRICULA = "grid grid-cols-[minmax(0,1fr)_52px_46px_52px_52px] items-baseline gap-x-2";
-
-/**
- * Lo que se promedia: los resultados ya nivelados. No es la nota que se enseña
- * arriba, y por eso lleva su propia etiqueta: después de esto la nota se acerca
- * al centro según cuántos benchmarks la sostienen y el conjunto entero se vuelve
- * a estirar a 0-100.
- */
-function mediaNivelada(v: Variante): number {
-  const peso = v.metricas.reduce((a, m) => a + m.peso, 0);
-  if (!peso) return 0;
-  return v.metricas.reduce((a, m) => a + (m.normalizado - m.desnivel) * m.peso, 0) / peso;
-}
 
 /**
  * La ficha contesta una sola pregunta: qué compra cada nivel de effort.
@@ -83,11 +72,12 @@ export default async function FichaModelo({
   // dónde sale ese número.
   const conDesglose = ordenadas.filter((v) => v.metricas.length > 0);
 
-  // El escalón que va de la media a la calidad. Necesita el centro y los
-  // extremos del conjunto, y un despliegue viejo no los manda: sin ellos la
-  // ficha enseña un paso menos en vez de una fila a medio calcular.
-  const centro = escala.centroNivelado;
-  const extremos = escala.extremos;
+  // Lo que el globo de cada nota necesita del conjunto y no de este modelo.
+  const deLaEscala = {
+    k: escala.k,
+    centroNivelado: escala.centroNivelado,
+    extremos: escala.extremos,
+  };
 
   // Los extremos de normalización son del conjunto entero, así que no cambian
   // entre variantes: se dicen una vez debajo de la tabla en lugar de repetirse
@@ -133,7 +123,11 @@ export default async function FichaModelo({
                 )}
               >
                 <span>{v.effort === "default" ? es.tarjeta.sinEffort : v.effort}</span>
-                <span className="text-right">{v.quality.toFixed(1)}</span>
+                <span className="text-right">
+                  <CuentaDeLaNota variante={v} escala={deLaEscala}>
+                    {v.quality.toFixed(1)}
+                  </CuentaDeLaNota>
+                </span>
                 <span className="text-right">{precio(v.cost)}</span>
               </div>
             ))}
@@ -200,7 +194,9 @@ export default async function FichaModelo({
                     </span>
                     <span className="col-span-4 text-right tabular-nums">
                       <span className="text-muted-foreground">{es.desglose.calidad} </span>
-                      <span className="font-medium">{v.quality.toFixed(1)}</span>
+                      <CuentaDeLaNota variante={v} escala={deLaEscala} className="font-medium">
+                        {v.quality.toFixed(1)}
+                      </CuentaDeLaNota>
                     </span>
                   </div>
                   {v.metricas.map((met) => (
@@ -222,37 +218,10 @@ export default async function FichaModelo({
                       </span>
                     </div>
                   ))}
-                  {v.metricas.length > 1 ? (
-                    <div
-                      className={cn(
-                        CUADRICULA,
-                        "px-3.5 pt-[3px] text-[11px] text-muted-foreground",
-                        v.acercada === undefined && "pb-2.5",
-                      )}
-                    >
-                      <span className="col-span-4 min-w-0">{es.desglose.media}</span>
-                      <span className="text-right tabular-nums">
-                        {mediaNivelada(v).toFixed(1)}
-                      </span>
-                    </div>
-                  ) : null}
-                  {/* El paso que faltaba: contra qué se promedia esa media. Va
-                      en la misma columna que ella y que los valores nivelados,
-                      porque las tres cifras están en la misma escala; la
-                      calidad de la cabecera ya no. */}
-                  {v.acercada !== undefined && centro !== undefined ? (
-                    <div
-                      className={cn(
-                        CUADRICULA,
-                        "px-3.5 pt-[3px] pb-2.5 text-[11px] text-muted-foreground",
-                      )}
-                    >
-                      <span className="col-span-4 min-w-0 truncate">
-                        {es.desglose.conElCentro(centro.toFixed(1))}
-                      </span>
-                      <span className="text-right tabular-nums">{v.acercada.toFixed(1)}</span>
-                    </div>
-                  ) : null}
+                  {/* Aire debajo del último benchmark: aquí acababan las dos
+                      filas de la media, y sin nada el grupo quedaba pegado al
+                      siguiente. */}
+                  <div className="pb-1" />
                 </div>
               ))}
             </div>
@@ -272,14 +241,11 @@ export default async function FichaModelo({
             ))}
           </dl>
 
-          {/* El salto de la media a la calidad, que es lo que la tabla no puede
-              enseñar: los dos pasos que faltan son iguales para todo el mundo y
-              están medidos en /metodologia con los números de hoy. */}
+          {/* La tabla llega hasta la columna nivelada y ahí se para. Lo que
+              viene después cuelga de cada nota, que es donde se pregunta; aquí
+              solo se dice que está ahí y se enlaza el porqué del centro. */}
           <p className="text-pretty text-[12.5px] leading-[1.5] text-muted-foreground">
-            {es.desglose.delaMediaALaNota}{" "}
-            {extremos
-              ? `${es.desglose.losExtremos(extremos.min.toFixed(1), extremos.max.toFixed(1))} `
-              : ""}
+            {es.desglose.dondeEstaLaCuenta}{" "}
             <Link
               href="/metodologia#evidencia"
               className="underline underline-offset-4 hover:text-foreground"

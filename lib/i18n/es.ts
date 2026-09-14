@@ -100,7 +100,6 @@ export const es = {
     // columna que los valores nivelados y no está en su misma escala: sin la
     // palabra parecía uno más de esa columna, y no lo es.
     calidad: "calidad",
-    media: "media nivelada",
     // Cabeceras del desglose. Son cuatro columnas porque la nota tiene cuatro
     // pasos y esconder uno la volvería a hacer imposible de comprobar.
     publica: "publica",
@@ -123,23 +122,13 @@ export const es = {
         "lo que se le corrige por el desnivel de su fuente: cuánto puntúa de más o de menos que las otras sobre los modelos que comparten. Sin eso, un 70 de un benchmark y un 70 de otro no valen lo mismo, y la nota acabaría diciendo quién te midió en vez de cómo rendiste.",
       nivelado: "lo que queda, y lo único que se promedia.",
     },
-    // El escalón que faltaba entre la media y la nota. Decir "se acerca al
-    // centro" no bastaba: la pregunta que quedaba era contra qué se promedia, y
-    // la respuesta —contra el centro del conjunto, que hoy vale esto— es un
-    // número que se puede poner en la fila y sumar.
-    conElCentro: (centro: string) => `promediada con el centro (${centro})`,
-    // Que la media no sea la nota es la diferencia entre una cifra que se puede
-    // comprobar y una que hay que creerse. Y sobre todo: los dos números no
-    // están en la misma escala, así que restarlos de frente —«perdió diez
-    // puntos»— es leer mal los dos.
-    delaMediaALaNota:
-      "Esa media todavía no es la calidad: se promedia una vez más, y esta vez contra el centro del conjunto. Cuantas menos mediciones la sostengan, más manda el centro, porque una media de dos se mueve más que una de tres. Lo que sale de ahí se estira a 0-100 sobre el conjunto entero, y eso ya es la nota. Por eso la media y la calidad no se parecen: están en escalas distintas.",
-    // Los dos extremos del último estirón. Sin ellos la última resta no se
-    // puede hacer, igual que sin los extremos de cada benchmark no se puede
-    // comprobar su columna de escala.
-    losExtremos: (min: string, max: string) =>
-      `En ese último estirón, el conjunto entero va hoy de ${min} a ${max}, y esos dos pasan a ser el 0 y el 100.`,
-    losDosPasos: "Cuánto manda el centro según cuántas mediciones haya, en Metodología.",
+    // La cuenta entera vive ahora en el globo de cada nota, con sus
+    // operaciones. Aquí abajo solo queda decir que está ahí: dos filas más de
+    // tabla enseñaban en qué se convertía cada número, pero no la operación, y
+    // el salto seguía habiendo que creérselo.
+    dondeEstaLaCuenta:
+      "La calidad de cada effort no es la media de esa columna: antes se promedia con el centro del conjunto, y lo que sale se estira a 0-100 sobre el conjunto entero. Pasa por encima de cualquier nota —o tócala— y sale la cuenta completa, con sus números y sus operaciones.",
+    losDosPasos: "Por qué el centro manda más cuantas menos mediciones haya, en Metodología.",
     // Los extremos son del conjunto entero, así que son los mismos para todas
     // las filas de todos los modelos. Van una vez al final y no repetidos en
     // cada una, que es lo que hacía que esto no cupiera para cada effort.
@@ -151,6 +140,23 @@ export const es = {
     // ninguna.
     unSoloBenchmark:
       "Con un solo benchmark no hay promedio que hacer: la nota sale de esa única medición, y es la que más se acerca al centro por eso mismo. Por eso una variante así no compite por las tres respuestas, salvo que se baje el mínimo a mano en la página principal.",
+  },
+  // El globo que cuelga de cada nota de calidad: la cuenta que va de los
+  // benchmarks a la nota, paso por paso y con las operaciones escritas.
+  cuenta: {
+    nivelado: "los benchmarks, ya nivelados",
+    media: "su media",
+    // El centro y la k se nombran en el título porque son las dos cifras de la
+    // fórmula que no salen de este modelo, sino del conjunto entero.
+    centro: (centro: string, k: string) =>
+      `promediada con el centro (${centro}), que pesa ${k}`,
+    escalaFinal: "estirada a la escala final",
+    // Los pasos intermedios se enseñan con un decimal, como todo lo demás de
+    // la página, así que rehacer la cuenta con lo que se ve puede dar una
+    // décima de diferencia. Decirlo cuesta una línea; no decirlo convierte un
+    // redondeo en la sospecha de que la cuenta está mal.
+    redondeo: "Todo va con un decimal, así que la última cifra puede bailar una décima.",
+    aria: (nota: string) => `Cómo se llega a la calidad ${nota}`,
   },
   // El $ por tarea no es un presupuesto. Sale de lo que costó resolver las
   // tareas de los benchmarks, puestas todas en la misma escala, y esa frase
