@@ -96,6 +96,35 @@ benchmarks que hacen falta para ser una respuesta, y la fuente entera no cambia 
 redistribuir. El adapter está escrito en `convex/sources/artificialAnalysis.ts` con
 `enabled: false`; se enciende el día que haya licencia comercial o permiso escrito.
 
+## La escala común
+
+Cada benchmark mide a quien puede, y no todos miden al mismo grupo. El que también mide a los
+modelos flojos tiene el suelo más abajo, así que reescalar a 0–100 contra el peor y el mejor de
+*su* grupo deja tres escalas que no cuadran: un 70 de uno y un 70 de otro no valían lo mismo, y al
+promediarlos la nota acababa diciendo **quién te midió** en vez de cómo rendiste.
+
+Así que antes de promediar se mide cuánto puntúa de más o de menos cada benchmark sobre **los
+modelos que comparte con otro** y se le resta. Es una resta, la misma para todos los modelos que
+mide esa fuente: corrige el nivel sin tocar cuánto manda ese benchmark en la nota. El ancla es la
+fuente de mayor cobertura, así que lo que se mueve es lo que mide a menos gente.
+
+Después, cada nota se acerca al centro del conjunto según **cuántos benchmarks la sostienen**. Una
+media de dos se mueve más que una de tres, y sin corregirlo los extremos de la tabla se llenan de
+modelos con poca evidencia, que no es lo mismo que modelos buenos. Cuánto se acerca no lo elegimos:
+sale de dividir cuánto se contradicen los benchmarks entre sí por cuánto se diferencian los
+modelos. Si coincidieran siempre, no habría nada que corregir.
+
+Las dos correcciones se calculan sobre el universo entero, nunca sobre lo que dejen tus filtros.
+[/metodologia](app/metodologia/page.tsx) publica los desniveles de hoy, el divisor del
+encogimiento y la pareja de benchmarks que peor cuadra pese a todo: la resta arregla el nivel, no
+la anchura, y callarlo sería el mismo pecado que este archivo dice no cometer.
+
+El costo tiene la misma enfermedad y el mismo tratamiento. Las tareas de un benchmark no son las de
+otro, así que el mismo modelo cuesta distinto según quién lo costeara; se nivela igual, sobre los
+modelos que las fuentes comparten, salvo que ahí la diferencia es multiplicativa. Lo que sale de
+todo eso es un **índice de eficiencia**: sirve para ordenar modelos entre sí, no para estimar tu
+factura.
+
 ## Los pesos
 
 **Todos los benchmarks que entran pesan lo mismo.** Nadie sabe si CursorBench vale exactamente
@@ -141,6 +170,26 @@ enseguida por qué: hoy los baratos con una sola medición aplastan el tramo int
 respuesta del día a día se queda sin candidatos, que es exactamente lo que la regla evita. La
 portada lo dice en esa situación en vez de enseñar dos tarjetas sin explicación.
 
+## La tarjeta que a veces falta
+
+«Día a día» es la única de las tres que se define **en relación con las otras dos**: el mejor es el
+mejor y el barato es el mejor de los baratos, pero el del día a día tiene que caer *entre* ambos.
+Cuando un filtro recorta el conjunto, a menudo no queda sitio, y la web enseñaba dos tarjetas
+diciendo «no hay datos» —que casi nunca era verdad: datos había de sobra—.
+
+Ahora pasan dos cosas. Cuando el codo cae **exactamente** en el barato o en el mejor, esa es la
+respuesta del día a día y la tarjeta sale repitiendo ese modelo, marcada en la propia fila: *el
+barato es también el que dejarías puesto* es una respuesta, y de las útiles. El repliegue solo actúa
+cuando no hay un tercer modelo, así que no puede robarle la tarjeta a nadie; y exige un codo de
+verdad, interior de la curva y por encima de la cuerda, porque el punto más barato tiene exceso cero
+por construcción y si no se colaría siempre.
+
+Y cuando de verdad no hay respuesta, se dice **cuál** de los tres motivos es: no quedan tres
+intercambios distintos, no hay codo (todo lo de en medio rinde peor que quedarse en un extremo), o
+lo que hay en medio no llega al piso de calidad, y entonces se enseña por cuánto se queda. El piso
+no se mueve para que salga la respuesta que uno quería —el mismo argumento por el que aquí no hay
+perfiles de tarea— pero el número se publica para poder discutirlo.
+
 ## Cómo está montado
 
 ```
@@ -158,6 +207,13 @@ app/, components/, lib/   Next.js App Router + shadcn/ui, copy en lib/i18n/es.ts
 tests/, scripts/          tests contra fixtures reales y herramientas de diagnóstico
 ```
 
+El icono tampoco es un archivo: `app/icon.tsx` y `app/apple-icon.tsx` lo dibujan en el build con
+`ImageResponse`, a partir de la marca de [`lib/marca.tsx`](lib/marca.tsx). Es el asterisco de la
+censura del nombre, con una barra por respuesta y el color de su tarjeta, así que el día que cambie
+la paleta el icono cambia con ella en vez de quedarse enseñando la del año pasado. No lleva texto a
+propósito: Satori exige una fuente en cuanto hay una letra, y sin ninguna el icono no se puede
+romper porque una fuente no esté disponible al construir.
+
 Las observaciones se guardan en formato largo (`sourceId`, `variante`, `métrica`, `valor`), así
 que **cambiar la metodología nunca requiere volver a descargar nada**: se recalcula sobre lo que
 ya hay.
@@ -172,11 +228,22 @@ donde hay que discutir.
 pnpm test
 ```
 
-61 tests contra fixtures reales capturados de cada fuente (`tests/fixtures/`). Cubren los
+80 tests contra fixtures reales capturados de cada fuente (`tests/fixtures/`). Cubren los
 parsers, la resolución de nombres y las propiedades del scoring: que nunca se recomiende una
-variante dominada, que las tres respuestas sean siempre tres modelos distintos y en orden de
-precio, que dos modelos con intervalos solapados se desempaten por costo, y que bajar el mínimo de
-benchmarks solo añada candidatos, nunca quite, y los añada marcados.
+variante dominada, que las tres respuestas salgan siempre en orden de precio, que dos modelos con
+intervalos solapados se desempaten por costo, y que bajar el mínimo de benchmarks solo añada
+candidatos, nunca quite, y los añada marcados.
+
+Y las de la tarjeta que falta: que haya respuesta para el día a día **si y solo si** no hay motivo
+para que falte, que un modelo repetido en dos tarjetas venga siempre marcado y que la marca apunte
+de verdad a la otra, y que ni el extremo de la curva ni un punto por debajo de la cuerda se cuelen
+como codo.
+
+Y las de la escala común, que son las que impiden que vuelva a colarse lo de antes: que nivelar
+deje a cada benchmark sin residuo sobre los modelos que mide, que la calidad media no baje al subir
+la evidencia, que con la misma medida la nota sostenida por tres benchmarks quede por encima de la
+sostenida por uno, y que dos variantes igual de eficientes salgan al mismo precio aunque las haya
+costeado una fuente distinta.
 
 Un cambio de maquetación río arriba rompe un test, no la producción.
 

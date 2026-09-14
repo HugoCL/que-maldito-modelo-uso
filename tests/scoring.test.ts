@@ -10,7 +10,11 @@ import { parse as terminalBench } from "../convex/sources/terminalBench";
 import { buildCandidates } from "../convex/scoring/candidates";
 import {
   blendedPrice,
+  calibrateCostFactor,
+  construirEscala,
+  cuantoEncoger,
   decay,
+  resolverDesniveles,
   scoreAll,
   type Candidate,
   type Scored,
@@ -23,7 +27,10 @@ import {
   empatanEstadisticamente,
   excesoSobreLaCuerda,
   paretoFrontier,
+  seleccionarRespuestas,
+  type Recomendacion,
 } from "../convex/scoring/tiers";
+import { aplicarFiltrosDeCatalogo } from "../convex/scoring/filtros";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (f: string) => readFileSync(join(here, "fixtures", f), "utf8");
@@ -52,9 +59,53 @@ test("el pipeline produce las tres tarjetas", () => {
   );
 });
 
+/**
+ * Las respuestas son modelos distintos, salvo cuando el codo de la curva cae
+ * exactamente en el barato o en el mejor. Entonces la del día a día repite ese
+ * modelo —porque esa ES la respuesta— y tiene que venir marcada con `repiteA`
+ * apuntando a la tarjeta con la que coincide. Repetir sin marcar sí sería un
+ * error: dos filas con el mismo nombre y sin explicación se leen como un fallo.
+ */
+function comprobarRepeticiones(rs: Array<Recomendacion<Scored>>) {
+  // Y al revés: una tarjeta marcada como repetida tiene que repetir de verdad.
+  // Marcar de más es tan mentira como marcar de menos, y sin esto una marca
+  // suelta en una tarjeta que no repite nada no la caza nadie.
+  for (const t of rs) {
+    if (!t.repiteA) continue;
+    assert.equal(t.tier, "dia_a_dia", `solo la del día a día puede repetir, y repite ${t.tier}`);
+    const otra = rs.find((x) => x.tier === t.repiteA);
+    assert.ok(otra, `${t.tier} dice repetir a "${t.repiteA}", que no existe`);
+    assert.equal(
+      otra.ganador.variantKey,
+      t.ganador.variantKey,
+      `${t.tier} dice repetir a "${t.repiteA}" y son modelos distintos`,
+    );
+  }
+
+  const porClave = new Map<string, string[]>();
+  for (const t of rs) {
+    porClave.set(t.ganador.variantKey, [...(porClave.get(t.ganador.variantKey) ?? []), t.tier]);
+  }
+  for (const [clave, tiers] of porClave) {
+    if (tiers.length === 1) continue;
+    assert.equal(tiers.length, 2, `${clave} sale en ${tiers.length} tarjetas: ${tiers.join(", ")}`);
+    const dia = rs.find((t) => t.tier === "dia_a_dia" && t.ganador.variantKey === clave);
+    assert.ok(dia, `${clave} se repite y ninguna de las dos es la del día a día`);
+    assert.ok(dia.repiteA, `${clave} se repite y la tarjeta del día a día no viene marcada`);
+    assert.ok(
+      tiers.includes(dia.repiteA),
+      `repiteA dice "${dia.repiteA}" y la otra tarjeta es "${tiers.find((x) => x !== "dia_a_dia")}"`,
+    );
+  }
+}
+
 test("las tres respuestas son tres modelos distintos", () => {
   const ganadores = tarjetas.map((t) => t.ganador.variantKey);
   assert.equal(new Set(ganadores).size, 3);
+  assert.ok(
+    tarjetas.every((t) => t.repiteA === undefined),
+    "sin filtros hay un tercer modelo, así que ninguna tarjeta debería repetir",
+  );
 });
 
 test("nunca se recomienda una variante dominada", () => {
@@ -96,9 +147,8 @@ test("las alternativas no repiten al ganador ni a las otras tarjetas", () => {
 // Si no puedes usar el recomendado, lo que necesitas es otra respuesta a la
 // MISMA pregunta. Una suplente de "barato" que cueste más que el ganador de
 // "día a día" no lo es.
-test("las tres respuestas nunca son el mismo modelo", () => {
-  const claves = tarjetas.map((t) => t.ganador.variantKey);
-  assert.equal(new Set(claves).size, claves.length, `tarjetas repetidas: ${claves.join(", ")}`);
+test("un modelo repetido en dos tarjetas siempre viene marcado", () => {
+  comprobarRepeticiones(tarjetas);
 });
 
 test("las razones citan números reales, no plantillas vacías", () => {
@@ -295,6 +345,388 @@ test("un mínimo raro en la URL cae en el de la metodología", () => {
   assert.equal(minimoDeBenchmarks(-3), THRESHOLDS.benchmarksMinimos);
   assert.equal(minimoDeBenchmarks(99), THRESHOLDS.benchmarksMinimos);
   assert.equal(minimoDeBenchmarks(NaN), THRESHOLDS.benchmarksMinimos);
+});
+
+// ─── la escala común ──────────────────────────────────────────────────────
+
+const mediana = (a: number[]) => {
+  const s = [...a].sort((x, y) => x - y);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
+
+/** La media que sale del desglose: lo que se promedia después de nivelar. */
+function mediaNivelada(s: Scored): number {
+  const peso = s.metricBreakdown.reduce((a, m) => a + m.weight, 0);
+  return s.metricBreakdown.reduce((a, m) => a + (m.normalized - m.desnivel) * m.weight, 0) / peso;
+}
+
+const metricasVistas = [...new Set(scored.flatMap((s) => s.metricBreakdown.map((m) => m.metric)))];
+
+/**
+ * Lo que el ajuste de desniveles deja en cero, que es lo único que promete: el
+ * residuo mediano de cada benchmark contra la nota de los modelos que mide.
+ */
+test("nivelar deja a cada benchmark sin residuo sobre los modelos que mide", () => {
+  const filas = scored.map((s) => s.metricBreakdown).filter((b) => b.length >= 2);
+  for (const k of metricasVistas) {
+    const residuos: number[] = [];
+    for (const f of filas) {
+      const mu = mediana(f.map((m) => m.normalized - m.desnivel));
+      for (const m of f) if (m.metric === k) residuos.push(m.normalized - m.desnivel - mu);
+    }
+    if (!residuos.length) continue;
+    assert.ok(Math.abs(mediana(residuos)) < 1e-9, `${k} se queda con residuo ${mediana(residuos)}`);
+  }
+});
+
+/**
+ * El desnivel corrige el nivel, no la anchura. Dos benchmarks que reparten a sus
+ * modelos en rangos distintos siguen sin cuadrar del todo, y la pareja que menos
+ * modelos comparte es la que peor queda. Lo que no puede pasar es que nivelar
+ * los separe más de lo que estaban.
+ */
+test("nivelar acerca los benchmarks entre sí, aunque no los iguale", () => {
+  const peor = (nivelado: boolean) => {
+    let max = 0;
+    for (const a of metricasVistas) {
+      for (const b of metricasVistas) {
+        if (a >= b) continue;
+        const d: number[] = [];
+        for (const s of scored) {
+          const ma = s.metricBreakdown.find((m) => m.metric === a);
+          const mb = s.metricBreakdown.find((m) => m.metric === b);
+          if (ma && mb) {
+            d.push(
+              ma.normalized - (nivelado ? ma.desnivel : 0) - (mb.normalized - (nivelado ? mb.desnivel : 0)),
+            );
+          }
+        }
+        if (d.length) max = Math.max(max, Math.abs(mediana(d)));
+      }
+    }
+    return max;
+  };
+  assert.ok(peor(true) < peor(false), `nivelar empeoró el desajuste: ${peor(false)} → ${peor(true)}`);
+});
+
+/**
+ * La razón de ser de todo esto. Antes, la calidad media BAJABA cuantos más
+ * benchmarks te hubieran medido: promediar tres escalas desniveladas castigaba
+ * justo a los que más evidencia tenían.
+ */
+test("la nota ya no premia que te hayan medido menos", () => {
+  const medias = [1, 2, 3].map((n) => {
+    const v = scored.filter((s) => s.benchmarks === n).map((s) => s.quality);
+    return v.length ? v.reduce((a, x) => a + x, 0) / v.length : undefined;
+  });
+  const conDatos = medias.filter((m): m is number => m !== undefined);
+  assert.ok(conDatos.length >= 2, "hacen falta al menos dos grupos para comparar");
+  for (let i = 1; i < conDatos.length; i++) {
+    assert.ok(
+      conDatos[i] >= conDatos[i - 1],
+      `la media con más benchmarks es menor: ${conDatos.join(" · ")}`,
+    );
+  }
+});
+
+/**
+ * Un conjunto donde los tres benchmarks dicen lo mismo de casi todos, con dos
+ * que se contradicen para que haya desacuerdo que medir. Al coincidir las tres
+ * escalas, el desnivel sale cero y lo único que distingue a `una-sola` de
+ * `las-tres` es cuánta evidencia las sostiene.
+ */
+function universoDePrueba(): Candidate[] {
+  const cand = (variantKey: string, valores: Record<string, number>): Candidate => ({
+    variantKey,
+    modelKey: variantKey,
+    modelName: variantKey,
+    creator: "Prueba",
+    effort: "default",
+    metrics: Object.entries(valores).map(([metric, value]) => ({
+      metric: metric as Candidate["metrics"][number]["metric"],
+      value,
+    })),
+    costSamples: [{ sourceId: "deepswe", costPerTask: 1 }],
+    providers: [],
+  });
+  const tres = (v: number) => ({
+    "deepswe.pass_at_1": v,
+    "cursorbench.score": v,
+    "terminalbench.accuracy": v,
+  });
+
+  return [
+    ...[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].map((v, i) => cand(`base-${i}`, tres(v))),
+    // Simétricos: dan varianza entre benchmarks sin mover ningún desnivel.
+    cand("discrepa-a", { "deepswe.pass_at_1": 0.9, "cursorbench.score": 0.1 }),
+    cand("discrepa-b", { "deepswe.pass_at_1": 0.1, "cursorbench.score": 0.9 }),
+    cand("una-sola", { "deepswe.pass_at_1": 0.9 }),
+    cand("las-tres", tres(0.9)),
+  ];
+}
+
+test("con la misma medida, más benchmarks encogen menos", () => {
+  const universo = universoDePrueba();
+  const puntuados = scoreAll(universo, AHORA);
+  const una = puntuados.find((s) => s.variantKey === "una-sola")!;
+  const tres = puntuados.find((s) => s.variantKey === "las-tres")!;
+
+  // Las tres escalas coinciden, así que no hay desnivel que repartir.
+  for (const s of puntuados) {
+    for (const m of s.metricBreakdown) assert.ok(Math.abs(m.desnivel) < 1e-9);
+  }
+  // Y las dos variantes del experimento promedian exactamente lo mismo.
+  assert.ok(Math.abs(mediaNivelada(una) - mediaNivelada(tres)) < 1e-9);
+
+  assert.equal(una.benchmarks, 1);
+  assert.equal(tres.benchmarks, 3);
+  assert.ok(
+    tres.quality > una.quality,
+    `la sostenida por tres (${tres.quality}) debería quedar por encima de la de una (${una.quality})`,
+  );
+});
+
+/**
+ * El ajuste se fue a 1e+36 la primera vez por esto: una fila con una sola
+ * lectura tiene un residuo que vale exactamente su propio desnivel, así que si
+ * se la deja opinar se retroalimenta y lo duplica en cada vuelta.
+ */
+test("el desnivel no se dispara aunque casi nadie tenga dos lecturas", () => {
+  const filas = [
+    ...Array.from({ length: 40 }, (_, i) => ({ ns: [{ k: "a", v: i / 40 }] })),
+    { ns: [{ k: "a", v: 0.5 }, { k: "b", v: 0.3 }] },
+    { ns: [{ k: "a", v: 0.7 }, { k: "b", v: 0.5 }] },
+  ];
+  const d = resolverDesniveles(filas, ["a", "b"], "a");
+  assert.equal(d.a, 0);
+  assert.ok(Number.isFinite(d.b), `desnivel no finito: ${d.b}`);
+  assert.ok(Math.abs(d.b + 0.2) < 1e-9, `esperaba -0.2, salió ${d.b}`);
+});
+
+test("sin nada con qué comparar no se encoge nada", () => {
+  assert.equal(cuantoEncoger([]), 0);
+  assert.equal(cuantoEncoger([[0.5]]), 0, "una sola lectura no dice nada del desacuerdo");
+  assert.equal(cuantoEncoger([[0.5, 0.5], [0.5, 0.5]]), 0, "sin varianza entre modelos, no se divide");
+});
+
+// ─── el costo en una sola escala ──────────────────────────────────────────
+
+/**
+ * Las tareas de un benchmark no son las de otro. Si Terminal-Bench cuesta el
+ * doble que DeepSWE para todo el mundo, dos variantes igual de eficientes tienen
+ * que salir al mismo precio aunque las haya costeado una fuente distinta.
+ */
+test("el costo no depende de qué benchmark lo costeó", () => {
+  const cand = (variantKey: string, costSamples: Candidate["costSamples"]): Candidate => ({
+    variantKey,
+    modelKey: variantKey,
+    modelName: variantKey,
+    creator: "Prueba",
+    effort: "default",
+    metrics: [{ metric: "deepswe.pass_at_1", value: 0.5 }],
+    costSamples,
+    providers: [],
+  });
+
+  const universo: Candidate[] = [
+    ...[1, 2, 4, 8, 16, 32].map((c, i) =>
+      cand(`par-${i}`, [
+        { sourceId: "deepswe", costPerTask: c },
+        { sourceId: "terminalbench", costPerTask: c * 2 },
+      ]),
+    ),
+    cand("solo-deepswe", [{ sourceId: "deepswe", costPerTask: 3 }]),
+    cand("ancla", [{ sourceId: "deepswe", costPerTask: 5 }]),
+    cand("solo-terminalbench", [{ sourceId: "terminalbench", costPerTask: 6 }]),
+  ];
+
+  const escala = construirEscala(universo, AHORA);
+  assert.ok(
+    Math.abs(Math.exp(escala.desnivelesDeCosto.terminalbench) - 2) < 1e-9,
+    `Terminal-Bench debería salir ×2, salió ×${Math.exp(escala.desnivelesDeCosto.terminalbench)}`,
+  );
+
+  const puntuados = scoreAll(universo, AHORA);
+  const ds = puntuados.find((s) => s.variantKey === "solo-deepswe")!;
+  const tb = puntuados.find((s) => s.variantKey === "solo-terminalbench")!;
+  assert.ok(ds.costMeasured && tb.costMeasured);
+  assert.ok(
+    Math.abs(ds.cost! - tb.cost!) < 1e-9,
+    `misma eficiencia, distinto precio: ${ds.cost} vs ${tb.cost}`,
+  );
+});
+
+test("una lectura de costo en cero no se cuela como ganga", () => {
+  const uno: Candidate = {
+    variantKey: "x@default",
+    modelKey: "x",
+    modelName: "X",
+    creator: "Nadie",
+    effort: "default",
+    metrics: [{ metric: "deepswe.pass_at_1", value: 0.5 }],
+    costSamples: [{ sourceId: "deepswe", costPerTask: 0 }],
+    pricing: { input: 3, output: 15, cacheRead: 0.3 },
+    providers: [],
+  };
+  const [s] = scoreAll([uno], AHORA);
+  assert.equal(s.costMeasured, false, "un cero no es un costo medido");
+  assert.ok(s.cost === undefined || s.cost > 0, `costo imposible: ${s.cost}`);
+});
+
+/**
+ * El ajuste anterior sumaba cuadrados, así que los modelos de veinte dólares la
+ * tarea pesaban cientos de veces más que los de treinta centavos y ponían ellos
+ * solos el factor.
+ */
+test("la calibración no la pone media docena de modelos caros", () => {
+  const cand = (variantKey: string, precio: number, medido: number): Candidate => ({
+    variantKey,
+    modelKey: variantKey,
+    modelName: variantKey,
+    creator: "Prueba",
+    effort: "default",
+    metrics: [{ metric: "deepswe.pass_at_1", value: 0.5 }],
+    costSamples: [{ sourceId: "deepswe", costPerTask: medido }],
+    // Sin caché: el precio mezclado es 0.75*input + 0.25*output. Con los dos
+    // iguales sale exactamente `precio`.
+    pricing: { input: precio, output: precio },
+    providers: [],
+  });
+
+  const tipicos = [0.2, 0.3, 0.5, 0.8, 1, 1.5, 2, 3].map((p, i) => cand(`tipico-${i}`, p, p * 2));
+  const caros = [40, 60].map((p, i) => cand(`caro-${i}`, p, p * 20));
+
+  const factor = calibrateCostFactor([...tipicos, ...caros], {})!;
+  assert.ok(Math.abs(factor - 2) < 1e-9, `el factor se fue a ${factor} en vez de 2`);
+});
+
+// ─── cuando no hay tercer modelo ──────────────────────────────────────────
+
+/** Una variante de mentira, con lo justo para que la elección funcione. */
+const punto = (modelName: string, cost: number, quality: number): Scored =>
+  ({
+    variantKey: modelName,
+    modelKey: modelName,
+    modelName,
+    effort: "default",
+    quality,
+    qualityLo: quality,
+    qualityHi: quality,
+    benchmarks: 2,
+    cost,
+  }) as Scored;
+
+/**
+ * El repliegue: si el codo cae justo en el modelo barato, esa es la respuesta
+ * del día a día aunque repita tarjeta. Antes desaparecía y la web decía «no hay
+ * datos», que era falso: datos había, y la respuesta también.
+ */
+test("cuando el codo es el modelo barato, la tarjeta sale marcada", () => {
+  // Sin nada entre el barato y el mejor: el salto grande está en el barato.
+  const universo = [punto("flojo", 1, 40), punto("codo", 2, 85), punto("mejor", 8, 100)];
+  const { tarjetas: t, sinDiaADia } = seleccionarRespuestas(universo);
+
+  const dia = t.find((x) => x.tier === "dia_a_dia");
+  assert.ok(dia, "debería salir la tarjeta del día a día");
+  assert.equal(dia.ganador.modelName, "codo");
+  assert.equal(dia.repiteA, "barato");
+  assert.equal(t.find((x) => x.tier === "barato")?.ganador.modelName, "codo");
+  assert.equal(sinDiaADia, undefined, "si hay tarjeta no puede haber motivo");
+
+  comprobarRepeticiones(t);
+  // La razón tiene que explicar la repetición, no repetir la del barato.
+  assert.match(dia.razon, /\$\d/);
+  assert.ok(dia.razon.length > 40);
+  assert.ok(dia.razonCorta.length <= 80, "la razón corta no cabe en una línea");
+  assert.notEqual(dia.razonCorta, t.find((x) => x.tier === "barato")!.razonCorta);
+});
+
+/**
+ * El punto más barato de la curva tiene exceso cero por construcción, así que
+ * sin exigir que el codo sea interior el extremo se colaría siempre y diríamos
+ * «lo que compensa es lo más barato», que es lo que ya dice la tarjeta de al
+ * lado. Aquí el barato es interior pero está POR DEBAJO de la cuerda: no es un
+ * codo y no puede repetir.
+ */
+test("un extremo, o algo por debajo de la cuerda, no se cuela como codo", () => {
+  const universo = [punto("flojo", 1, 70), punto("plano", 2, 72), punto("mejor", 8, 100)];
+  const { tarjetas: t, sinDiaADia } = seleccionarRespuestas(universo);
+
+  assert.equal(t.find((x) => x.tier === "dia_a_dia"), undefined);
+  assert.equal(t.find((x) => x.tier === "barato")?.ganador.modelName, "plano");
+  assert.deepEqual(sinDiaADia, { tipo: "sin_codo" });
+});
+
+test("con menos de tres intercambios se dice cuántos hay", () => {
+  const { tarjetas: t, sinDiaADia } = seleccionarRespuestas([
+    punto("flojo", 1, 70),
+    punto("mejor", 8, 100),
+  ]);
+  assert.equal(t.find((x) => x.tier === "dia_a_dia"), undefined);
+  assert.deepEqual(sinDiaADia, { tipo: "frontera_corta", puntos: 2 });
+});
+
+/**
+ * El caso que más rabia da: hay un modelo justo en medio y se queda a un punto
+ * del piso. El piso no se toca —aflojarlo hasta que salga la respuesta que uno
+ * quería es lo que este repo dice no hacer— pero la cifra se enseña para poder
+ * discutirlo con el número delante.
+ */
+test("cuando lo de en medio no llega al piso, se dice por cuánto", () => {
+  const universo = [
+    punto("flojo", 1, 62),
+    punto("barato", 2, 70),
+    punto("casi", 4, 74),
+    punto("mejor", 8, 100),
+  ];
+  const { tarjetas: t, sinDiaADia } = seleccionarRespuestas(universo);
+
+  assert.equal(t.find((x) => x.tier === "dia_a_dia"), undefined);
+  assert.equal(sinDiaADia?.tipo, "bajo_el_piso");
+  assert.ok(sinDiaADia?.tipo === "bajo_el_piso" && sinDiaADia.mejor === 74);
+  assert.ok(sinDiaADia?.tipo === "bajo_el_piso" && sinDiaADia.piso === 75);
+});
+
+/**
+ * Barrido sobre los filtros de verdad. Dos invariantes que tienen que
+ * cumplirse siempre, y la comprobación de que las cuatro situaciones existen de
+ * verdad en los datos de hoy y no son código muerto.
+ */
+test("hay tarjeta del día a día si y solo si no hay motivo, en cualquier filtro", () => {
+  const vistos = new Set<string>();
+  let combinaciones = 0;
+
+  for (const familia of [undefined, "gpt", "claude", "gemini", "grok"]) {
+    for (const presupuestoMax of [undefined, 1, 3, 8]) {
+      for (const minimo of [2, 1]) {
+        for (const soloOpenWeights of [undefined, true]) {
+          const filtrados = aplicarFiltrosDeCatalogo(scored, {
+            familia,
+            presupuestoMax,
+            soloOpenWeights,
+          });
+          const { tarjetas: t, sinDiaADia } = seleccionarRespuestas(filtrados, minimo);
+          if (!t.length) continue;
+          combinaciones++;
+
+          const dia = t.find((x) => x.tier === "dia_a_dia");
+          assert.equal(
+            !!dia,
+            !sinDiaADia,
+            `familia=${familia} tope=${presupuestoMax} minimo=${minimo}: la tarjeta y el motivo no se excluyen`,
+          );
+          comprobarRepeticiones(t);
+          vistos.add(dia?.repiteA ? `repite:${dia.repiteA}` : (sinDiaADia?.tipo ?? "propio"));
+        }
+      }
+    }
+  }
+
+  assert.ok(combinaciones > 30, `solo se probaron ${combinaciones} combinaciones`);
+  for (const esperado of ["propio", "repite:barato", "frontera_corta", "sin_codo"]) {
+    assert.ok(vistos.has(esperado), `nunca se dio el caso "${esperado}": ${[...vistos].join(", ")}`);
+  }
 });
 
 // ─── casos límite ─────────────────────────────────────────────────────────

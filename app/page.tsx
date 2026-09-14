@@ -12,7 +12,7 @@ import {
 } from "@/components/barra-de-filtros";
 import { FilaRecomendacion } from "@/components/fila-recomendacion";
 import { FronteraCalidadCosto } from "@/components/frontera-calidad-costo";
-import { TituloMutante } from "@/components/titulo-mutante";
+import { PortadaHero, SelloCargando } from "@/components/portada-hero";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   fechaDeLaSemilla,
@@ -23,6 +23,7 @@ import {
 } from "@/lib/datos";
 import { es } from "@/lib/i18n/es";
 import { hace } from "@/lib/tiempo";
+import type { Recomendaciones } from "@/lib/types";
 
 export default async function Inicio({
   searchParams,
@@ -32,15 +33,14 @@ export default async function Inicio({
   const params = await searchParams;
 
   return (
-    <main className="mx-auto flex w-full max-w-[940px] flex-col gap-[30px] px-5 py-10 sm:px-[30px] sm:py-[40px]">
-      <section className="flex flex-col gap-2.5">
-        <TituloMutante
-          texto={es.marca.nombreEntero}
-          palabra={es.marca.palabrota}
-          className="max-w-[640px] text-balance font-heading text-[34px] leading-[1.05] font-semibold tracking-[-0.03em] sm:text-[44px]"
-        />
-        <p className="text-[15px] leading-[1.5] text-muted-foreground">{es.marca.lema}</p>
-      </section>
+    <main className="mx-auto flex w-full max-w-[940px] flex-col gap-[30px] px-5 py-10 sm:px-[30px] sm:py-[44px]">
+      <PortadaHero
+        sello={
+          <Suspense fallback={<SelloCargando />}>
+            <Sello params={params} />
+          </Suspense>
+        }
+      />
 
       <AvisoSemilla />
 
@@ -78,25 +78,62 @@ async function Barra({ params }: { params: ParamsPortada }) {
   );
 }
 
+/**
+ * Los filtros que recortan el conjunto, leídos de la URL.
+ *
+ * Vive aquí fuera porque lo piden dos sitios: la tabla y el sello del titular.
+ * Que los dos partan de la misma función es lo que hace que la línea de arriba
+ * cuente lo mismo que se ve debajo.
+ */
+function filtrosDeLaUrl(params: ParamsPortada) {
+  const ocultos = modelosOcultos(params.ocultos ?? params.sinModelo);
+  return {
+    sin: fuentesApagadas(params.sin),
+    minimo: minimoPedido(params.minimo),
+    familia: params.familia?.trim() || undefined,
+    ocultos: ocultos.length ? ocultos : undefined,
+    soloOpenWeights: params.abiertos === "1" || undefined,
+  };
+}
+
+/**
+ * La línea de arriba del titular: con cuánto se ha puntuado y de cuándo es.
+ *
+ * Pide las mismas recomendaciones que la tabla y con los mismos filtros, así que
+ * no es un viaje de más: `obtenerRecomendaciones` no repite la consulta dentro
+ * de la misma petición.
+ */
+async function Sello({ params }: { params: ParamsPortada }) {
+  const base = filtrosDeLaUrl(params);
+  const [datos, metodologia] = await Promise.all([
+    obtenerRecomendaciones(base),
+    obtenerMetodologia(),
+  ]);
+  const benchmarks = metodologia.metricas.filter((m) => !base.sin.includes(m.fuente)).length;
+
+  // De cuándo son los datos es lo que menos se puede perder de esta línea, así
+  // que en estrecho lo que se cae es la cuenta de variantes y no la fecha.
+  return (
+    <p className="truncate font-mono text-[11.5px] leading-none text-muted-foreground">
+      {es.portada.benchmarks(benchmarks)}
+      <span className="hidden sm:inline"> · {es.portada.variantes(datos.totales.candidatos)}</span> ·{" "}
+      {usandoSemilla
+        ? `instantánea del ${fechaDeLaSemilla}`
+        : (hace(datos.actualizado) ?? es.estado.sinCorridas)}
+    </p>
+  );
+}
+
 async function Respuestas({ params }: { params: ParamsPortada }) {
   const techo = params.max ? Number(params.max) : undefined;
-  const soloAbiertos = params.abiertos === "1";
-  const sin = fuentesApagadas(params.sin);
-  const minimo = minimoPedido(params.minimo);
-  const familia = params.familia?.trim() || undefined;
-  const ocultos = modelosOcultos(params.ocultos ?? params.sinModelo);
   // Familia, open weight y modelos ocultos recortan el conjunto: las tres
   // respuestas y el gráfico se calculan sobre ese subconjunto. El techo no:
   // vela lo que descarta para que se vea a qué se está renunciando.
   const hayTecho = techo !== undefined;
 
-  const base = {
-    sin,
-    minimo,
-    familia,
-    ocultos: ocultos.length ? ocultos : undefined,
-    soloOpenWeights: soloAbiertos || undefined,
-  };
+  const base = filtrosDeLaUrl(params);
+  const sin = base.sin;
+  const minimo = base.minimo;
 
   const [universo, filtrada, metodologia] = await Promise.all([
     obtenerRecomendaciones(base),
@@ -146,13 +183,29 @@ async function Respuestas({ params }: { params: ParamsPortada }) {
 
         <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 border-t bg-muted/40 px-4 py-[11px] font-mono text-[11.5px] text-muted-foreground sm:grid sm:grid-cols-[150px_minmax(0,1fr)_90px_96px] sm:gap-6 sm:px-[22px]">
           <span className="hidden sm:block" />
+          {/* La frase entera y no solo la ayuda al pasar por encima: en una
+              pantalla táctil esa caja no aparece nunca, y decir que el precio es
+              un índice no puede depender de tener ratón. */}
           <span>{es.portada.pieDeTabla(metodologia.metricas.filter((m) => !sin.includes(m.fuente)).length)}</span>
           <span className="hidden sm:block sm:text-right">{es.portada.calidad}</span>
-          <span className="hidden sm:block sm:text-right">{es.portada.porTarea}</span>
+          <span className="opcion hidden sm:block sm:justify-end sm:text-right">
+            <Link href="/metodologia#indice" className="underline decoration-dotted underline-offset-4">
+              {es.portada.porTarea}
+            </Link>
+            <span className="ayuda">{es.indice.ayuda}</span>
+          </span>
         </div>
       </div>
 
-      {tarjetas.length < 3 ? (
+      {/* Por qué falta la del día a día, dicho con su motivo y no con un «no hay
+          datos» que casi nunca era verdad. Cuando falta otra tarjeta distinta,
+          o cuando se ha bajado el mínimo a mano, siguen valiendo las frases de
+          antes: son otra cosa. */}
+      {datos.sinDiaADia ? (
+        <p className="font-mono text-[11.5px] leading-[1.6] text-muted-foreground">
+          {motivoSinDiaADia(datos.sinDiaADia)}
+        </p>
+      ) : tarjetas.length < 3 ? (
         <p className="font-mono text-[11.5px] leading-[1.6] text-muted-foreground">
           {minimo !== undefined && minimo < metodologia.umbrales.benchmarksMinimos
             ? es.portada.faltanRespuestasConUno
@@ -182,6 +235,19 @@ async function Respuestas({ params }: { params: ParamsPortada }) {
       </p>
     </>
   );
+}
+
+/** La frase que le toca a cada motivo, con sus cifras. */
+function motivoSinDiaADia(motivo: NonNullable<Recomendaciones["sinDiaADia"]>): string {
+  const f = es.portada.sinDiaADia;
+  switch (motivo.tipo) {
+    case "frontera_corta":
+      return f.fronteraCorta(motivo.puntos);
+    case "bajo_el_piso":
+      return f.bajoElPiso(motivo.mejor.toFixed(0), motivo.piso.toFixed(0));
+    case "sin_codo":
+      return f.sinCodo;
+  }
 }
 
 function EsqueletoBarra() {

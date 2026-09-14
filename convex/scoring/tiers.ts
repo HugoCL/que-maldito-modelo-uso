@@ -39,6 +39,37 @@ export type Recomendacion<T extends Elegible = Elegible> = {
   razon: string;
   /** La misma explicación en una línea, para la fila de la portada. */
   razonCorta: string;
+  /**
+   * La otra tarjeta cuyo ganador es este mismo modelo, cuando las dos coinciden.
+   *
+   * Solo lo lleva la del día a día, y solo cuando el codo cae exactamente en el
+   * modelo barato o en el bueno. Va aquí y no en un booleano porque la fila
+   * tiene que poder decir *a cuál* repite: «también es el barato» y «también es
+   * el mejor» no dicen lo mismo.
+   */
+  repiteA?: Tier;
+};
+
+/**
+ * Por qué no hay tarjeta del día a día.
+ *
+ * Son tres situaciones distintas y la web las contaba todas con la misma frase,
+ * «no hay datos para las tres respuestas», que en la mayoría de los casos no era
+ * verdad: había datos de sobra y lo que pasaba era otra cosa. Una ausencia
+ * explicada es información; una ausencia a secas parece un fallo.
+ */
+export type MotivoSinDiaADia =
+  /** Menos de tres puntos no dominados: no hay tres intercambios que ofrecer. */
+  | { tipo: "frontera_corta"; puntos: number }
+  /** Ningún punto intermedio mejora repartir entre los dos extremos. */
+  | { tipo: "sin_codo" }
+  /** Había candidatos en el hueco y solo el piso de calidad los tumbó. */
+  | { tipo: "bajo_el_piso"; mejor: number; piso: number };
+
+export type Respuestas<T extends Elegible = Elegible> = {
+  tarjetas: Recomendacion<T>[];
+  /** Vacío cuando sí hay tarjeta del día a día. */
+  sinDiaADia?: MotivoSinDiaADia;
 };
 
 /** Cuántas suplentes se guardan por tarjeta. */
@@ -225,6 +256,31 @@ function razonCortaDiaADia(g: Elegible, lider: Elegible): string {
     : `Donde pagar más deja de comprar calidad. Este es el que dejas puesto.`;
 }
 
+/**
+ * Cuando el codo cae en un modelo que ya tiene tarjeta.
+ *
+ * No es un caso degenerado que haya que disimular: es una respuesta, y bastante
+ * útil. «El barato es también el que dejarías puesto» es justo lo que alguien
+ * quiere saber, y esconderla detrás de dos tarjetas sin explicación deja
+ * pensando que falta un dato.
+ */
+function razonRepetida(g: Elegible, lider: Elegible, repiteA: Tier): string {
+  const pct = Math.round((g.quality / lider.quality) * 100);
+  return repiteA === "barato"
+    ? `Es el mismo modelo de la tarjeta de arriba. Hoy el punto donde pagar más deja de comprar calidad cae justo en el barato: ${dinero(
+        g.cost!,
+      )} por tarea con el ${pct}% de la calidad de ${nombre(lider)}, y por encima no hay escalón que compense.`
+    : `Es el mismo modelo de la tarjeta de abajo. Entre el barato y él no hay ningún escalón intermedio que merezca la pena: a ${dinero(
+        g.cost!,
+      )} por tarea ya estás en lo mejor que hay medido.`;
+}
+
+function razonCortaRepetida(repiteA: Tier): string {
+  return repiteA === "barato"
+    ? "Hoy el barato es también el que dejarías puesto: nada en medio compensa."
+    : "Hoy no hay término medio: el que compensa es directamente el mejor.";
+}
+
 function razonCortaBueno(g: Elegible, lider: Elegible): string {
   if (g !== lider && empatanEstadisticamente(g, lider)) {
     return `Empata con ${nombre(lider)} y cuesta ${dinero(lider.cost! - g.cost!)} menos.`;
@@ -239,12 +295,12 @@ function razonCortaBueno(g: Elegible, lider: Elegible): string {
  * calidad definidos en config.ts. Si el resultado sorprende, lo que hay que
  * discutir son los pesos, no el código.
  */
-export function elegirTarjetas<T extends Elegible>(
+export function seleccionarRespuestas<T extends Elegible>(
   scored: T[],
   minimo: number = THRESHOLDS.benchmarksMinimos,
-): Recomendacion<T>[] {
+): Respuestas<T> {
   const pool = elegibles(scored, minimo);
-  if (pool.length === 0) return [];
+  if (pool.length === 0) return { tarjetas: [] };
 
   const frontier = paretoFrontier(pool);
   const porCalidad = [...pool].sort((a, b) => b.quality - a.quality);
@@ -288,21 +344,46 @@ export function elegirTarjetas<T extends Elegible>(
   // variante bastante más barata y con menos calidad de punto, y entonces el
   // codo, que no sabe nada de eso, elegiría algo mejor que "lo mejor". Las
   // tarjetas dejarían de significar lo que dicen.
+  const piso = lider.quality * THRESHOLDS.pisoCalidadDiaADia;
   const candidatosDiarios = frontier.filter(
     (s) =>
       s !== bueno &&
       s !== barato &&
-      s.quality >= lider.quality * THRESHOLDS.pisoCalidadDiaADia &&
+      s.quality >= piso &&
       s.quality <= bueno.quality &&
       s.cost! <= bueno.cost! &&
       (barato === undefined || s.cost! >= barato.cost!),
   );
-  const diaADia = codoDeLaFrontera(frontier, candidatosDiarios);
+  const exceso = excesoSobreLaCuerda(frontier);
+  const propio = codoDeLaFrontera(frontier, candidatosDiarios);
+
+  // REPLIEGUE: si no hay un tercer modelo, el codo puede ser uno de los otros
+  // dos, y entonces esa ES la respuesta del día a día aunque repita tarjeta.
+  //
+  // Solo cuando no hay nadie más, nunca antes. Si esto entrara en la elección
+  // normal, el barato podría tener más exceso que el tercer modelo y quitarle la
+  // tarjeta en la vista por defecto, que hoy da tres respuestas distintas.
+  //
+  // Y solo si es un codo de verdad: interior de la frontera, por encima de la
+  // cuerda y pasando el mismo piso. El punto más barato de la curva tiene exceso
+  // cero por construcción, así que sin la condición de interior el extremo se
+  // colaría siempre y diríamos «lo que compensa es lo más barato que hay», que
+  // es exactamente lo que la tarjeta de al lado ya dice.
+  const porCosto = [...frontier].sort((a, b) => a.cost! - b.cost!);
+  const interiores = new Set(porCosto.slice(1, -1));
+  const repetido = propio
+    ? undefined
+    : ([barato, bueno].filter(Boolean) as T[])
+        .filter((s) => interiores.has(s) && (exceso.get(s) ?? 0) > 0 && s.quality >= piso)
+        .sort((a, b) => (exceso.get(b) ?? 0) - (exceso.get(a) ?? 0))[0];
+
+  const diaADia = propio ?? repetido;
+  const repiteA: Tier | undefined =
+    repetido === undefined ? undefined : repetido === barato ? "barato" : "bueno";
 
   // Las suplentes de cada tarjeta se eligen con el MISMO criterio que su
   // ganador. Si no, la segunda opción de "día a día" acaba siendo el modelo más
   // barato de todos, que es justamente la respuesta de la otra tarjeta.
-  const exceso = excesoSobreLaCuerda(frontier);
   const ganadores = new Set([barato, diaADia, bueno].filter(Boolean) as T[]);
   const suplentes = (candidatas: T[]) =>
     candidatas.filter((s) => !ganadores.has(s)).slice(0, MAX_ALTERNATIVAS);
@@ -320,14 +401,20 @@ export function elegirTarjetas<T extends Elegible>(
   }
 
   if (diaADia) {
+    // Una tarjeta repetida no tiene lista propia de candidatas de la que sacar
+    // suplentes, así que salen de la frontera entera por exceso. `suplentes` ya
+    // quita a los tres ganadores, que es lo que impide mandar a nadie a la
+    // tarjeta de al lado.
+    const candidatas = candidatosDiarios.length ? candidatosDiarios : frontier;
     out.push({
       tier: "dia_a_dia",
       ganador: diaADia,
       alternativas: suplentes(
-        [...candidatosDiarios].sort((a, b) => (exceso.get(b) ?? 0) - (exceso.get(a) ?? 0)),
+        [...candidatas].sort((a, b) => (exceso.get(b) ?? 0) - (exceso.get(a) ?? 0)),
       ),
-      razon: razonDiaADia(diaADia, lider),
-      razonCorta: razonCortaDiaADia(diaADia, lider),
+      razon: repiteA ? razonRepetida(diaADia, lider, repiteA) : razonDiaADia(diaADia, lider),
+      razonCorta: repiteA ? razonCortaRepetida(repiteA) : razonCortaDiaADia(diaADia, lider),
+      repiteA,
     });
   }
 
@@ -339,5 +426,44 @@ export function elegirTarjetas<T extends Elegible>(
     razonCorta: razonCortaBueno(bueno, lider),
   });
 
-  return out;
+  return { tarjetas: out, sinDiaADia: diaADia ? undefined : porQueFalta(frontier, barato, bueno, piso) };
+}
+
+/**
+ * Cuál de las tres cosas ha pasado, para poder decirla en vez de callarla.
+ *
+ * El orden importa. Primero lo que se ve de un vistazo (no hay tres puntos),
+ * después lo que solo se sabe mirando el piso, y al final el caso de fondo: que
+ * ningún escalón intermedio mejore repartir entre los dos extremos.
+ */
+function porQueFalta<T extends Elegible>(
+  frontier: T[],
+  barato: T | undefined,
+  bueno: T,
+  piso: number,
+): MotivoSinDiaADia {
+  if (frontier.length < 3) return { tipo: "frontera_corta", puntos: frontier.length };
+
+  // Los mismos candidatos de siempre pero sin exigir el piso: si aquí hay
+  // alguien, el piso es lo único que lo dejó fuera y se puede decir por cuánto.
+  const sinPiso = frontier.filter(
+    (s) =>
+      s !== bueno &&
+      s !== barato &&
+      s.quality <= bueno.quality &&
+      s.cost! <= bueno.cost! &&
+      (barato === undefined || s.cost! >= barato.cost!),
+  );
+  if (sinPiso.length) {
+    return { tipo: "bajo_el_piso", mejor: Math.max(...sinPiso.map((s) => s.quality)), piso };
+  }
+  return { tipo: "sin_codo" };
+}
+
+/** Las tres respuestas a secas, para quien no necesita saber por qué falta una. */
+export function elegirTarjetas<T extends Elegible>(
+  scored: T[],
+  minimo: number = THRESHOLDS.benchmarksMinimos,
+): Recomendacion<T>[] {
+  return seleccionarRespuestas(scored, minimo).tarjetas;
 }

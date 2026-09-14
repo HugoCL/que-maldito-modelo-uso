@@ -24,6 +24,9 @@
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
   --color-ok: var(--ok);
+  --color-tier-barato: var(--tier-barato);
+  --color-tier-dia: var(--tier-dia);
+  --color-tier-bueno: var(--tier-bueno);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -66,6 +69,23 @@
   /* Verde de "esta fuente respondió". Solo lo usa /estado, y solo ahí hace
      falta un color que no sea ni el azul de la marca ni el rojo de un fallo. */
   --ok: oklch(0.45 0.1 150);
+  /**
+   * Un color por respuesta, el mismo en la fila y en el gráfico. Antes las tres
+   * compartían el gris del texto salvo la del día a día, y en el gráfico había
+   * que ir a buscar el 01, el 02 y el 03 para saber cuál era cuál.
+   *
+   * Los tres están medidos, no elegidos a ojo: pasan la banda de luminosidad,
+   * el suelo de croma, la separación bajo daltonismo (peor par ΔE 10.6 en
+   * protanopia) y el contraste contra el fondo. El azul del día a día es el de
+   * la marca; los otros dos se eligieron por separación, y que el caro salga
+   * cálido y el barato frío es la única parte que es gusto.
+   *
+   * El color nunca va solo: las filas llevan su nombre escrito y los puntos del
+   * gráfico su 01/02/03, que es lo que exige un par en la banda baja de ΔE.
+   */
+  --tier-barato: oklch(0.58 0.12 175);
+  --tier-dia: oklch(0.5 0.134 242.749);
+  --tier-bueno: oklch(0.62 0.15 60);
   --border: oklch(0.92 0.004 286.32);
   --input: oklch(0.92 0.004 286.32);
   --ring: oklch(0.705 0.015 286.067);
@@ -104,6 +124,13 @@
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --ok: oklch(0.72 0.13 150);
+  /* Pasos propios, no los de arriba aclarados: contra un fondo casi negro la
+     banda de luminosidad que se lee es otra, y el azul de marca se queda por
+     debajo de ella. Medidos igual que los claros: peor par ΔE 9.5 en
+     deuteranopia y ΔE 19.2 con visión completa. */
+  --tier-barato: oklch(0.66 0.15 160);
+  --tier-dia: oklch(0.63 0.13 245);
+  --tier-bueno: oklch(0.65 0.15 62);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.552 0.016 285.938);
@@ -128,10 +155,63 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* El fondo del titular se sale a lo ancho de la ventana con `100vw`, que
+       cuenta la barra de desplazamiento y por eso puede provocar desplazamiento
+       horizontal. `clip` lo corta sin convertir el body en un contenedor de
+       scroll, que es lo que rompería cualquier `position: sticky`. */
+    overflow-x: clip;
   }
   html {
     @apply font-sans;
   }
+}
+
+/**
+ * El fondo del titular.
+ *
+ * Dos capas que se salen del ancho del texto para que la portada empiece con
+ * algo y no con un borde: un resplandor del color de la marca detrás del
+ * titular y una retícula de puntos que se desvanece antes de llegar a los
+ * datos. Las dos son estáticas y decorativas; nada de esto se mueve, porque lo
+ * que ya se mueve en esta pantalla es la palabrota y con eso basta.
+ */
+.hero {
+  --hero-resplandor: color-mix(in oklch, var(--primary) 14%, transparent);
+  --hero-reticula: 0.055;
+
+  position: relative;
+}
+
+.hero::before,
+.hero::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  z-index: -1;
+  width: 100vw;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.hero::before {
+  top: -10rem;
+  height: calc(100% + 14rem);
+  background: radial-gradient(44rem 20rem at 50% 8rem, var(--hero-resplandor), transparent 70%);
+}
+
+.hero::after {
+  top: -6rem;
+  height: calc(100% + 9rem);
+  background-image: radial-gradient(currentColor 0.5px, transparent 0.5px);
+  background-size: 20px 20px;
+  color: var(--foreground);
+  opacity: var(--hero-reticula);
+  mask-image: linear-gradient(to bottom, transparent, black 30%, transparent);
+}
+
+.dark .hero {
+  --hero-resplandor: color-mix(in oklch, var(--tier-dia) 16%, transparent);
+  --hero-reticula: 0.09;
 }
 /**
  * La palabrota que se tapa sola. Ver components/titulo-mutante.tsx.

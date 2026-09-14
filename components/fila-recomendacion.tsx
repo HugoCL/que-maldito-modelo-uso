@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { es } from "@/lib/i18n/es";
 import { cn } from "@/lib/utils";
-import type { Tarjeta } from "@/lib/types";
+import type { Tarjeta, Tier } from "@/lib/types";
 
 /**
  * Una respuesta es una fila, no una tarjeta.
@@ -21,8 +21,19 @@ import type { Tarjeta } from "@/lib/types";
  * respuesta sostenida por una sola medición y otra por tres no se pueden ver
  * igual solo porque las dos hayan salido del mismo cálculo.
  */
+/**
+ * El color de cada respuesta, el mismo que usa el gráfico. Van escritas y no
+ * compuestas (`border-l-tier-${tier}`) porque Tailwind lee las clases del código
+ * fuente: una clase que se arma en tiempo de ejecución no se genera nunca.
+ */
+const COLOR = {
+  barato: { barra: "border-l-tier-barato" },
+  dia_a_dia: { barra: "border-l-tier-dia" },
+  bueno: { barra: "border-l-tier-bueno" },
+} as const;
+
 export function FilaRecomendacion({ tarjeta, sin }: { tarjeta: Tarjeta; sin?: string }) {
-  const { tier, ganador, razonCorta, alternativas } = tarjeta;
+  const { tier, ganador, razonCorta, alternativas, repiteA } = tarjeta;
   // Las fuentes apagadas viajan con el enlace: si no, la ficha puntuaría con
   // todas y enseñaría una calidad distinta de la que acaba de leerse aquí.
   const ficha = (modelKey: string) => (sin ? `/modelo/${modelKey}?sin=${sin}` : `/modelo/${modelKey}`);
@@ -37,13 +48,24 @@ export function FilaRecomendacion({ tarjeta, sin }: { tarjeta: Tarjeta; sin?: st
         // comparar en vertical, que es para lo que existe.
         "flex flex-col gap-2 border-t border-border px-4 py-5 first:border-t-0",
         "sm:grid sm:grid-cols-[150px_minmax(0,1fr)_90px_96px] sm:items-center sm:gap-6 sm:px-[22px]",
-        destacada && "border-l-[3px] border-l-primary sm:py-6",
+        // Las tres llevan su color a la izquierda, no solo la del día a día:
+        // es lo que ata cada fila con su punto en el gráfico de abajo. La del
+        // día a día se sigue distinguiendo por la barra más ancha y el cuerpo
+        // de letra, que es lo que dice cuál es la recomendación de verdad.
+        //
+        // El color va en la barra y no en el texto. Un texto de doce píxeles
+        // pintado del color de una serie casi nunca llega al contraste que pide
+        // una letra pequeña, y además el color dejaría de ser una marca al lado
+        // del dato para ser el dato.
+        "border-l-[3px]",
+        COLOR[tier].barra,
+        destacada && "sm:border-l-[5px] sm:py-6",
       )}
     >
       <span
         className={cn(
           "font-mono text-xs leading-[1.4]",
-          destacada ? "text-primary" : "text-muted-foreground",
+          destacada ? "text-foreground" : "text-muted-foreground",
         )}
       >
         {t.orden} {t.etiqueta}
@@ -76,6 +98,7 @@ export function FilaRecomendacion({ tarjeta, sin }: { tarjeta: Tarjeta; sin?: st
               {ganador.effort}
             </span>
           ) : null}
+          {repiteA ? <Repite tier={repiteA} /> : null}
           {ganador.confidence === "baja" ? <Baja /> : null}
         </p>
         <p
@@ -135,6 +158,27 @@ export function FilaRecomendacion({ tarjeta, sin }: { tarjeta: Tarjeta; sin?: st
         </span>
       </div>
     </div>
+  );
+}
+
+/**
+ * La marca de una tarjeta que recomienda el mismo modelo que otra.
+ *
+ * Sin ella, dos filas con el mismo nombre se leen como un error de la web. Con
+ * ella son lo que de verdad son: el codo de la curva cae en un modelo que ya
+ * tiene tarjeta, así que ese modelo responde a las dos preguntas.
+ *
+ * El mismo borde punteado que `Baja` y por el mismo motivo: no es una alarma,
+ * es una aclaración.
+ */
+function Repite({ tier }: { tier: Tier }) {
+  return (
+    <span
+      title={es.tarjeta.repiteNota}
+      className="ml-2 shrink-0 rounded border border-dashed px-1.5 py-px align-middle font-mono text-[10.5px] font-normal whitespace-nowrap text-muted-foreground"
+    >
+      {es.tarjeta.repite[tier]}
+    </span>
   );
 }
 

@@ -37,8 +37,10 @@ export function aTarjeta(s: Scored) {
       valor: Math.round(m.value * 1000) / 10,
       peso: Math.round(m.weight * 100) / 100,
       // Lo que hace falta para poder comprobar la nota a mano: dónde cae este
-      // resultado en la escala y contra qué extremos se reescaló.
+      // resultado en la escala, contra qué extremos se reescaló y cuánto se le
+      // descuenta a este benchmark por puntuar más alto o más bajo que los otros.
       normalizado: Math.round(m.normalized * 1000) / 10,
+      desnivel: Math.round(m.desnivel * 1000) / 10,
       minimo: Math.round(m.min * 1000) / 10,
       maximo: Math.round(m.max * 1000) / 10,
     })),

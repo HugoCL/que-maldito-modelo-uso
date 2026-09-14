@@ -35,9 +35,9 @@ import type { Tarjeta, Tier, Variante } from "@/lib/types";
  */
 
 const config = {
-  barato: { label: es.tiers.barato.titulo, color: "var(--foreground)" },
-  dia_a_dia: { label: es.tiers.dia_a_dia.titulo, color: "var(--primary)" },
-  bueno: { label: es.tiers.bueno.titulo, color: "var(--foreground)" },
+  barato: { label: es.tiers.barato.titulo, color: "var(--tier-barato)" },
+  dia_a_dia: { label: es.tiers.dia_a_dia.titulo, color: "var(--tier-dia)" },
+  bueno: { label: es.tiers.bueno.titulo, color: "var(--tier-bueno)" },
 } satisfies ChartConfig;
 
 type Punto = {
@@ -289,7 +289,10 @@ function Orden({
       x={cx}
       y={cy + (arriba ? -(radio + 5) : radio + 13)}
       textAnchor="middle"
-      className={p.tier === "dia_a_dia" ? "fill-primary" : "fill-muted-foreground"}
+      // En tinta y no del color de su punto: es una etiqueta de once píxeles
+      // pegada a un punto que ya lleva el color, y pintarla igual que él solo
+      // le quitaría contraste.
+      className="fill-foreground"
       style={{
         fontFamily: "var(--font-geist-mono)",
         fontSize: 11,
@@ -328,7 +331,7 @@ function Globo({ active, payload }: { active?: boolean; payload?: Array<{ payloa
         <span className="font-mono tabular-nums">${p.x.toFixed(2)}</span>
       </div>
       <p className="text-muted-foreground">
-        {p.medido ? es.tarjeta.costoMedido : es.tarjeta.costoEstimado}
+        {p.medido ? es.tarjeta.costoMedido : es.tarjeta.costoEstimado} · {es.indice.enElGlobo}
         {p.tier ? ` · ${config[p.tier].label}` : ""}
       </p>
     </div>

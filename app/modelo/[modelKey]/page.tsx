@@ -15,6 +15,21 @@ export async function generateMetadata({ params }: PageProps<"/modelo/[modelKey]
 const numero = (n: number) => new Intl.NumberFormat("es").format(n);
 const precio = (n?: number) => (n === undefined ? "—" : `$${n.toFixed(2)}`);
 
+/** Las cinco columnas del desglose: el benchmark y sus cuatro pasos. */
+const CUADRICULA = "grid grid-cols-[minmax(0,1fr)_52px_46px_52px_52px] items-baseline gap-x-2";
+
+/**
+ * Lo que se promedia: los resultados ya nivelados. No es la nota que se enseña
+ * arriba, y por eso lleva su propia etiqueta: después de esto la nota se acerca
+ * al centro según cuántos benchmarks la sostienen y el conjunto entero se vuelve
+ * a estirar a 0-100.
+ */
+function mediaNivelada(v: Variante): number {
+  const peso = v.metricas.reduce((a, m) => a + m.peso, 0);
+  if (!peso) return 0;
+  return v.metricas.reduce((a, m) => a + (m.normalizado - m.desnivel) * m.peso, 0) / peso;
+}
+
 /**
  * La ficha contesta una sola pregunta: qué compra cada nivel de effort.
  *
@@ -138,47 +153,72 @@ export default async function FichaModelo({
               solo una de las cinco notas deja las otras cuatro en un número
               que hay que creerse.
 
-              Dos columnas por benchmark: lo que publica y ese mismo resultado
-              ya en la escala de 0 a 100, que es lo único que se promedia. El
-              peso no va en la fila porque todos valen lo mismo. */}
-          <div className="flex flex-col overflow-hidden rounded-[10px] border font-mono text-[12px]">
-            {conDesglose.map((v) => (
-              <div key={v.variantKey} className="border-t border-border first:border-t-0">
-                <div className="flex items-baseline gap-x-4 bg-muted/40 px-3.5 py-2">
-                  <span className="min-w-0 flex-1">
-                    {v.effort === "default" ? es.tarjeta.sinEffort : v.effort}
-                  </span>
-                  <span className="w-14 text-right font-medium tabular-nums">
-                    {v.quality.toFixed(1)}
-                  </span>
-                </div>
-                {v.metricas.map((met) => (
-                  <div
-                    key={met.metric}
-                    className="flex items-baseline gap-x-4 px-3.5 py-[7px] text-muted-foreground"
-                  >
-                    <span className="min-w-0 flex-1 truncate">{met.etiqueta}</span>
-                    <span className="tabular-nums">{met.valor.toFixed(1)}%</span>
-                    {/* Con un decimal y no redondeado a entero: la gracia de
-                        esto es poder rehacer la media a mano, y 100 + 99 da
-                        99.5 cuando la nota dice 99.7. */}
-                    <span className="w-14 text-right tabular-nums text-foreground/75">
-                      {met.normalizado.toFixed(1)}
+              Cuatro columnas por benchmark, que son los cuatro pasos: lo que
+              publica, ese resultado en la escala de 0 a 100, lo que se le resta
+              por el desnivel de su fuente y lo que queda, que es lo único que se
+              promedia. Esconder el desnivel dejaría la media sin cuadrar. El
+              peso no va en la fila porque todos valen lo mismo.
+
+              En una columna estrecha la tabla se desplaza en horizontal en vez
+              de apretar cinco columnas hasta que no se lea ninguna. */}
+          <div className="overflow-x-auto rounded-[10px] border">
+            <div className="flex min-w-[420px] flex-col font-mono text-[12px]">
+              <div className={cn(CUADRICULA, "bg-muted/40 px-3.5 py-2 text-[11px] text-muted-foreground")}>
+                <span />
+                <span className="text-right">{es.desglose.publica}</span>
+                <span className="text-right">{es.desglose.enLaEscala}</span>
+                <span className="text-right">{es.desglose.desnivel}</span>
+                <span className="text-right">{es.desglose.nivelado}</span>
+              </div>
+              {conDesglose.map((v) => (
+                <div key={v.variantKey} className="border-t border-border">
+                  <div className={cn(CUADRICULA, "bg-muted/40 px-3.5 py-2")}>
+                    <span className="min-w-0 truncate">
+                      {v.effort === "default" ? es.tarjeta.sinEffort : v.effort}
+                    </span>
+                    <span className="col-span-4 text-right font-medium tabular-nums">
+                      {v.quality.toFixed(1)}
                     </span>
                   </div>
-                ))}
-                {v.metricas.length > 1 ? (
-                  <div className="flex items-baseline gap-x-4 px-3.5 pt-[3px] pb-2.5 text-[11px] text-muted-foreground">
-                    <span className="min-w-0 flex-1">{es.desglose.media}</span>
-                    <span className="w-14 text-right tabular-nums">{v.quality.toFixed(1)}</span>
-                  </div>
-                ) : null}
-              </div>
-            ))}
+                  {v.metricas.map((met) => (
+                    <div
+                      key={met.metric}
+                      className={cn(CUADRICULA, "px-3.5 py-[7px] text-muted-foreground")}
+                    >
+                      <span className="min-w-0 truncate">{met.etiqueta}</span>
+                      <span className="text-right tabular-nums">{met.valor.toFixed(1)}%</span>
+                      {/* Con un decimal y no redondeado a entero: la gracia de
+                          esto es poder rehacer la media a mano, y 100 + 99 da
+                          99.5 cuando la nota dice 99.7. */}
+                      <span className="text-right tabular-nums">{met.normalizado.toFixed(1)}</span>
+                      <span className="text-right tabular-nums">
+                        {met.desnivel === 0 ? "—" : (-met.desnivel).toFixed(1)}
+                      </span>
+                      <span className="text-right tabular-nums text-foreground/75">
+                        {(met.normalizado - met.desnivel).toFixed(1)}
+                      </span>
+                    </div>
+                  ))}
+                  {v.metricas.length > 1 ? (
+                    <div
+                      className={cn(
+                        CUADRICULA,
+                        "px-3.5 pt-[3px] pb-2.5 text-[11px] text-muted-foreground",
+                      )}
+                    >
+                      <span className="col-span-4 min-w-0">{es.desglose.media}</span>
+                      <span className="text-right tabular-nums">
+                        {mediaNivelada(v).toFixed(1)}
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
           </div>
 
           <p className="text-pretty text-[12.5px] leading-[1.5] text-muted-foreground">
-            {es.desglose.comoSeLee} {es.desglose.escalas(escalas)}
+            {es.desglose.comoSeLee} {es.desglose.escalas(escalas)} {es.desglose.ultimosPasos}
             {conDesglose.some((v) => v.metricas.length < 2)
               ? ` ${es.desglose.unSoloBenchmark}`
               : ""}
