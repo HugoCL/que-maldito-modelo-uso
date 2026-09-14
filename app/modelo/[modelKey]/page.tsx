@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { fuentesApagadas } from "@/components/barra-de-filtros";
-import { obtenerModelo, obtenerRecomendaciones } from "@/lib/datos";
+import { obtenerEscala, obtenerModelo, obtenerRecomendaciones } from "@/lib/datos";
 import { es } from "@/lib/i18n/es";
 import { cn } from "@/lib/utils";
 import type { Tier, Variante } from "@/lib/types";
@@ -56,9 +56,12 @@ export default async function FichaModelo({
   // Las fuentes apagadas llegan desde la portada en la URL: la ficha tiene que
   // puntuar con lo mismo con lo que se puntuó la recomendación que trajo aquí.
   const sin = fuentesApagadas((await searchParams).sin as string | undefined);
-  const [m, datos] = await Promise.all([
+  // La escala va con el mismo `sin`: apagar una fuente mueve el centro y los
+  // extremos, y el desglose los enseña para que la cuenta cierre.
+  const [m, datos, escala] = await Promise.all([
     obtenerModelo(modelKey, sin),
     obtenerRecomendaciones({ sin }),
+    obtenerEscala(sin),
   ]);
   if (!m) notFound();
 
@@ -79,6 +82,12 @@ export default async function FichaModelo({
   // se lean en paralelo: la de arriba dice cuánto saca cada nivel, esta de
   // dónde sale ese número.
   const conDesglose = ordenadas.filter((v) => v.metricas.length > 0);
+
+  // El escalón que va de la media a la calidad. Necesita el centro y los
+  // extremos del conjunto, y un despliegue viejo no los manda: sin ellos la
+  // ficha enseña un paso menos en vez de una fila a medio calcular.
+  const centro = escala.centroNivelado;
+  const extremos = escala.extremos;
 
   // Los extremos de normalización son del conjunto entero, así que no cambian
   // entre variantes: se dicen una vez debajo de la tabla en lugar de repetirse
@@ -217,13 +226,31 @@ export default async function FichaModelo({
                     <div
                       className={cn(
                         CUADRICULA,
-                        "px-3.5 pt-[3px] pb-2.5 text-[11px] text-muted-foreground",
+                        "px-3.5 pt-[3px] text-[11px] text-muted-foreground",
+                        v.acercada === undefined && "pb-2.5",
                       )}
                     >
                       <span className="col-span-4 min-w-0">{es.desglose.media}</span>
                       <span className="text-right tabular-nums">
                         {mediaNivelada(v).toFixed(1)}
                       </span>
+                    </div>
+                  ) : null}
+                  {/* El paso que faltaba: contra qué se promedia esa media. Va
+                      en la misma columna que ella y que los valores nivelados,
+                      porque las tres cifras están en la misma escala; la
+                      calidad de la cabecera ya no. */}
+                  {v.acercada !== undefined && centro !== undefined ? (
+                    <div
+                      className={cn(
+                        CUADRICULA,
+                        "px-3.5 pt-[3px] pb-2.5 text-[11px] text-muted-foreground",
+                      )}
+                    >
+                      <span className="col-span-4 min-w-0 truncate">
+                        {es.desglose.conElCentro(centro.toFixed(1))}
+                      </span>
+                      <span className="text-right tabular-nums">{v.acercada.toFixed(1)}</span>
                     </div>
                   ) : null}
                 </div>
@@ -250,6 +277,9 @@ export default async function FichaModelo({
               están medidos en /metodologia con los números de hoy. */}
           <p className="text-pretty text-[12.5px] leading-[1.5] text-muted-foreground">
             {es.desglose.delaMediaALaNota}{" "}
+            {extremos
+              ? `${es.desglose.losExtremos(extremos.min.toFixed(1), extremos.max.toFixed(1))} `
+              : ""}
             <Link
               href="/metodologia#evidencia"
               className="underline underline-offset-4 hover:text-foreground"

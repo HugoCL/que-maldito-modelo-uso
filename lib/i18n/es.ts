@@ -123,14 +123,23 @@ export const es = {
         "lo que se le corrige por el desnivel de su fuente: cuánto puntúa de más o de menos que las otras sobre los modelos que comparten. Sin eso, un 70 de un benchmark y un 70 de otro no valen lo mismo, y la nota acabaría diciendo quién te midió en vez de cómo rendiste.",
       nivelado: "lo que queda, y lo único que se promedia.",
     },
+    // El escalón que faltaba entre la media y la nota. Decir "se acerca al
+    // centro" no bastaba: la pregunta que quedaba era contra qué se promedia, y
+    // la respuesta —contra el centro del conjunto, que hoy vale esto— es un
+    // número que se puede poner en la fila y sumar.
+    conElCentro: (centro: string) => `promediada con el centro (${centro})`,
     // Que la media no sea la nota es la diferencia entre una cifra que se puede
     // comprobar y una que hay que creerse. Y sobre todo: los dos números no
     // están en la misma escala, así que restarlos de frente —«perdió diez
-    // puntos»— es leer mal los dos. Los dos pasos que faltan son iguales para
-    // todo el mundo, así que se explican una vez y se enlazan.
+    // puntos»— es leer mal los dos.
     delaMediaALaNota:
-      "Esa media todavía no es la calidad. Antes pasan dos cosas más: se acerca al centro del conjunto según cuántas mediciones la sostienen, porque una media de dos se mueve más que una de tres, y después el conjunto entero se vuelve a estirar a 0-100. Por eso los dos números no se parecen: no están en la misma escala.",
-    losDosPasos: "Los dos pasos, con los números de hoy, en Metodología.",
+      "Esa media todavía no es la calidad: se promedia una vez más, y esta vez contra el centro del conjunto. Cuantas menos mediciones la sostengan, más manda el centro, porque una media de dos se mueve más que una de tres. Lo que sale de ahí se estira a 0-100 sobre el conjunto entero, y eso ya es la nota. Por eso la media y la calidad no se parecen: están en escalas distintas.",
+    // Los dos extremos del último estirón. Sin ellos la última resta no se
+    // puede hacer, igual que sin los extremos de cada benchmark no se puede
+    // comprobar su columna de escala.
+    losExtremos: (min: string, max: string) =>
+      `En ese último estirón, el conjunto entero va hoy de ${min} a ${max}, y esos dos pasan a ser el 0 y el 100.`,
+    losDosPasos: "Cuánto manda el centro según cuántas mediciones haya, en Metodología.",
     // Los extremos son del conjunto entero, así que son los mismos para todas
     // las filas de todos los modelos. Van una vez al final y no repetidos en
     // cada una, que es lo que hacía que esto no cupiera para cada effort.

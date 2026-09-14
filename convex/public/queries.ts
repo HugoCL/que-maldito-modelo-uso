@@ -163,8 +163,11 @@ export const modelo = query({
  * configuración.
  */
 export const escala = query({
-  args: {},
-  handler: async (ctx) => escalaPublica(construirEscala(await candidatosDesdeLaBase(ctx), Date.now())),
+  args: { sin: v.optional(v.array(v.string())) },
+  handler: async (ctx, { sin }) =>
+    escalaPublica(
+      construirEscala(await candidatosDesdeLaBase(ctx), Date.now(), metricasExcluidas(sin)),
+    ),
 });
 
 /**

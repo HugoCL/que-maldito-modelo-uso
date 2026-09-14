@@ -183,11 +183,15 @@ export async function obtenerMetodologia(): Promise<Metodologia> {
  * sino el mismo cálculo sobre la instantánea, igual que las recomendaciones:
  * una escala congelada explicaría unas notas que ya no son las que se ven.
  */
-export async function obtenerEscala(): Promise<EscalaPublica> {
+export async function obtenerEscala(sin?: string[]): Promise<EscalaPublica> {
+  // Con `sin`, porque apagar una fuente mueve el centro y los extremos: una
+  // ficha que puntúa con una fuente menos y explica la escala de otra estaría
+  // enseñando una cuenta que no cierra.
+  const excluidas = metricasExcluidas(sin);
   return pedirAConvex(
     consultas.escala,
-    {},
-    escalaPublica(construirEscala(CANDIDATOS_SEMILLA, Date.now())),
+    { sin },
+    escalaPublica(construirEscala(CANDIDATOS_SEMILLA, Date.now(), excluidas)),
   );
 }
 

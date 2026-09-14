@@ -15,10 +15,12 @@ import {
   cuantoEncoger,
   decay,
   resolverDesniveles,
+  escalaPublica,
   scoreAll,
   type Candidate,
   type Scored,
 } from "../convex/scoring/compute";
+import { aTarjeta } from "../convex/scoring/presentar";
 import { THRESHOLDS, minimoDeBenchmarks } from "../convex/scoring/config";
 import {
   codoDeLaFrontera,
@@ -502,6 +504,44 @@ test("el desnivel no se dispara aunque casi nadie tenga dos lecturas", () => {
   assert.equal(d.a, 0);
   assert.ok(Number.isFinite(d.b), `desnivel no finito: ${d.b}`);
   assert.ok(Math.abs(d.b + 0.2) < 1e-9, `esperaba -0.2, salió ${d.b}`);
+});
+
+/**
+ * El desglose de la ficha promete que la nota se puede rehacer a mano, y ahora
+ * dibuja la cadena entera: la media de la columna nivelada, esa media
+ * promediada con el centro del conjunto, y el estirón final contra los extremos
+ * publicados. Si cualquiera de los tres deja de cuadrar, la tabla se convierte
+ * en cuatro números y un acto de fe, que es exactamente lo que no quiere ser.
+ *
+ * El margen es de una décima porque todo lo que se enseña va con un decimal:
+ * el error de redondeo es inevitable, el de cálculo no.
+ */
+test("la cadena que dibuja la ficha llega de los benchmarks a la nota", () => {
+  const pub = escalaPublica(construirEscala(candidates, AHORA));
+  const ancho = pub.extremos.max - pub.extremos.min;
+
+  for (const v of scored.map(aTarjeta)) {
+    if (!v.metricas.length) continue;
+
+    // La media, tal como la suma la ficha: desde lo que publica la tarjeta.
+    const peso = v.metricas.reduce((a, m) => a + m.peso, 0);
+    const media = v.metricas.reduce((a, m) => a + (m.normalizado - m.desnivel) * m.peso, 0) / peso;
+
+    // El paso de en medio va entre la media y el centro, nunca fuera: es un
+    // promedio de los dos, así que no puede pasarse de largo por ningún lado.
+    const hueco = pub.centroNivelado - media;
+    if (Math.abs(hueco) > 0.1) {
+      const parte = (v.acercada - media) / hueco;
+      assert.ok(parte >= -0.01 && parte <= 1.01, `${v.variantKey}: se fue a ${parte.toFixed(2)}`);
+    }
+
+    // Y el último estirón tiene que devolver la nota que se enseña arriba.
+    const rehecha = Math.max(0, Math.min(1, (v.acercada - pub.extremos.min) / ancho)) * 100;
+    assert.ok(
+      Math.abs(rehecha - v.quality) < 0.11,
+      `${v.variantKey}: ${rehecha.toFixed(2)} contra ${v.quality}`,
+    );
+  }
 });
 
 test("sin nada con qué comparar no se encoge nada", () => {

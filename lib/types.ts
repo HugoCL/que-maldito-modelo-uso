@@ -34,6 +34,14 @@ export type Variante = {
   creator: string;
   effort: string;
   quality: number;
+  /**
+   * La media nivelada ya promediada con el centro del conjunto, en las unidades
+   * del desglose. Es el escalón que falta entre la media y la calidad.
+   *
+   * Opcional porque un despliegue de Convex anterior a este campo no lo manda,
+   * y la ficha prefiere enseñar un paso menos a romperse.
+   */
+  acercada?: number;
   qualityLo: number;
   qualityHi: number;
   coverage: number;
@@ -130,6 +138,10 @@ export type EscalaPublica = {
   costePorFuente: Record<string, number>;
   /** El centro del conjunto, de 0 a 100, al que tiran las notas con poca evidencia. */
   centro: number;
+  /** Ese mismo centro en las unidades del desglose de la ficha. */
+  centroNivelado?: number;
+  /** Los extremos del último estirón, en esas mismas unidades: pasan a ser 0 y 100. */
+  extremos?: { min: number; max: number };
   /** Cuánto tiran: varianza entre benchmarks del mismo modelo / varianza entre modelos. */
   k: number;
 };

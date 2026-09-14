@@ -18,6 +18,9 @@ export function aTarjeta(s: Scored) {
     creator: s.creator,
     effort: s.effort,
     quality: Math.round(s.quality * 10) / 10,
+    // En las unidades del desglose (los benchmarks nivelados), no en las de
+    // la calidad: es el paso que va de una escala a la otra.
+    acercada: Math.round(s.acercada * 1000) / 10,
     qualityLo: Math.round(s.qualityLo * 10) / 10,
     qualityHi: Math.round(s.qualityHi * 10) / 10,
     coverage: Math.round(s.coverage * 100) / 100,

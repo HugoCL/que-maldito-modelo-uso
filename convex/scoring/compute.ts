@@ -59,6 +59,15 @@ export type MetricBreakdown = {
 
 export type Scored = Candidate & {
   quality: number;
+  /**
+   * La media nivelada ya promediada con el centro, antes del último estirón.
+   *
+   * Es el único paso de la nota que no se veía en ninguna parte: el desglose de
+   * la ficha llegaba hasta la media y la nota aparecía después sin nada en
+   * medio. Va en las unidades de los benchmarks nivelados, o sea las mismas que
+   * la media, para que la resta entre las dos signifique algo.
+   */
+  acercada: number;
   qualityLo: number;
   qualityHi: number;
   coverage: number;
@@ -509,17 +518,25 @@ export function escalaPublica(escala: Escala) {
       Object.entries(escala.desnivelesDeCosto).map(([k, v]) => [k, Math.exp(v)]),
     ),
     centro: ancho > 0 ? ((escala.centro - escala.extremos.min) / ancho) * 100 : 50,
+    // El mismo centro y los extremos del último estirón, pero en las unidades
+    // del desglose de la ficha: ahí la cuenta se hace desde la media nivelada,
+    // que no está en la escala final, y con `centro` a secas no cuadraba.
+    centroNivelado: escala.centro * 100,
+    extremos: { min: escala.extremos.min * 100, max: escala.extremos.max * 100 },
     k: escala.k,
   };
 }
 
-/** De la media nivelada y encogida a la nota de 0 a 100 que se enseña. */
-function aNota(mu: number, evidencia: number, escala: Escala): number {
-  const encogida = encoger(mu, evidencia, escala.centro, escala.k);
+/** El último paso: de la media ya acercada al centro a la nota de 0 a 100. */
+function aEscalaFinal(acercada: number, escala: Escala): number {
   const { min, max } = escala.extremos;
   if (!(max > min)) return 50;
-  return clamp01((encogida - min) / (max - min)) * 100;
+  return clamp01((acercada - min) / (max - min)) * 100;
 }
+
+/** Los dos pasos que van de la media nivelada a la nota que se enseña. */
+const aNota = (mu: number, evidencia: number, escala: Escala): number =>
+  aEscalaFinal(encoger(mu, evidencia, escala.centro, escala.k), escala);
 
 export function scoreCandidate(
   c: Candidate,
@@ -546,6 +563,9 @@ export function scoreCandidate(
   return {
     ...c,
     quality: nivelada ? aNota(nivelada.mu, nivelada.evidencia, escala) : 0,
+    acercada: nivelada
+      ? encoger(nivelada.mu, nivelada.evidencia, escala.centro, escala.k)
+      : escala.centro,
     qualityLo: nivelada ? aNota(nivelada.muLo, nivelada.evidencia, escala) : 0,
     qualityHi: nivelada ? aNota(nivelada.muHi, nivelada.evidencia, escala) : 0,
     coverage: nivelada?.coverage ?? 0,
