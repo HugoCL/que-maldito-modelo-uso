@@ -200,7 +200,7 @@ export default async function Metodologia() {
         ) : null}
       </Seccion>
 
-      <Seccion titulo="Cuántas mediciones sostienen la nota">
+      <Seccion titulo="Cuántas mediciones sostienen la nota" id="evidencia">
         <p>
           Una media de dos mediciones se mueve más que una de tres. Sin corregirlo, los extremos de
           la tabla se llenan de modelos con poca evidencia: no porque sean mejores ni peores, sino

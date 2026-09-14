@@ -14,6 +14,16 @@ export async function generateMetadata({ params }: PageProps<"/modelo/[modelKey]
 
 const numero = (n: number) => new Intl.NumberFormat("es").format(n);
 const precio = (n?: number) => (n === undefined ? "—" : `$${n.toFixed(2)}`);
+/** El mismo formato que usa /metodologia para esta corrección. */
+const conSigno = (n: number) => `${n > 0 ? "+" : "−"}${Math.abs(n).toFixed(1)}`;
+
+/** Una línea por columna del desglose, en el orden en el que se leen. */
+const COLUMNAS = [
+  [es.desglose.publica, es.desglose.columnas.publica],
+  [es.desglose.enLaEscala, es.desglose.columnas.enLaEscala],
+  [es.desglose.ajuste, es.desglose.columnas.ajuste],
+  [es.desglose.nivelado, es.desglose.columnas.nivelado],
+] as const;
 
 /** Las cinco columnas del desglose: el benchmark y sus cuatro pasos. */
 const CUADRICULA = "grid grid-cols-[minmax(0,1fr)_52px_46px_52px_52px] items-baseline gap-x-2";
@@ -153,11 +163,14 @@ export default async function FichaModelo({
               solo una de las cinco notas deja las otras cuatro en un número
               que hay que creerse.
 
-              Cuatro columnas por benchmark, que son los cuatro pasos: lo que
-              publica, ese resultado en la escala de 0 a 100, lo que se le resta
-              por el desnivel de su fuente y lo que queda, que es lo único que se
-              promedia. Esconder el desnivel dejaría la media sin cuadrar. El
-              peso no va en la fila porque todos valen lo mismo.
+              Cuatro columnas por benchmark, que son los cuatro pasos: lo
+              que publica, ese resultado en la escala de 0 a 100, el ajuste que
+              le toca por el desnivel de su fuente y lo que queda, que es lo
+              único que se promedia. El ajuste se enseña con su signo y ya
+              cambiado de sentido: es el número que hay que sumarle a la columna
+              de al lado, porque el sentido de esta tabla es poder rehacerla a
+              mano. Esconderlo dejaría la media sin cuadrar. El peso no va en la
+              fila porque todos valen lo mismo.
 
               En una columna estrecha la tabla se desplaza en horizontal en vez
               de apretar cinco columnas hasta que no se lea ninguna. */}
@@ -167,7 +180,7 @@ export default async function FichaModelo({
                 <span />
                 <span className="text-right">{es.desglose.publica}</span>
                 <span className="text-right">{es.desglose.enLaEscala}</span>
-                <span className="text-right">{es.desglose.desnivel}</span>
+                <span className="text-right">{es.desglose.ajuste}</span>
                 <span className="text-right">{es.desglose.nivelado}</span>
               </div>
               {conDesglose.map((v) => (
@@ -176,8 +189,9 @@ export default async function FichaModelo({
                     <span className="min-w-0 truncate">
                       {v.effort === "default" ? es.tarjeta.sinEffort : v.effort}
                     </span>
-                    <span className="col-span-4 text-right font-medium tabular-nums">
-                      {v.quality.toFixed(1)}
+                    <span className="col-span-4 text-right tabular-nums">
+                      <span className="text-muted-foreground">{es.desglose.calidad} </span>
+                      <span className="font-medium">{v.quality.toFixed(1)}</span>
                     </span>
                   </div>
                   {v.metricas.map((met) => (
@@ -192,7 +206,7 @@ export default async function FichaModelo({
                           99.5 cuando la nota dice 99.7. */}
                       <span className="text-right tabular-nums">{met.normalizado.toFixed(1)}</span>
                       <span className="text-right tabular-nums">
-                        {met.desnivel === 0 ? "—" : (-met.desnivel).toFixed(1)}
+                        {met.desnivel === 0 ? "—" : conSigno(-met.desnivel)}
                       </span>
                       <span className="text-right tabular-nums text-foreground/75">
                         {(met.normalizado - met.desnivel).toFixed(1)}
@@ -217,11 +231,38 @@ export default async function FichaModelo({
             </div>
           </div>
 
+          {/* Una línea por columna y en su mismo orden, en vez del párrafo
+              corrido de antes: cada frase queda al lado del número que explica,
+              y el nombre de la columna es el que se lee en la cabecera. */}
+          <dl className="flex flex-col gap-1.5 pt-1 text-[12.5px] leading-[1.5] text-muted-foreground">
+            {COLUMNAS.map(([nombre, texto]) => (
+              <div key={nombre} className="flex gap-2.5">
+                <dt className="w-[58px] shrink-0 font-mono text-[11px] leading-[1.6] text-foreground/70">
+                  {nombre}
+                </dt>
+                <dd className="min-w-0 text-pretty">{texto}</dd>
+              </div>
+            ))}
+          </dl>
+
+          {/* El salto de la media a la calidad, que es lo que la tabla no puede
+              enseñar: los dos pasos que faltan son iguales para todo el mundo y
+              están medidos en /metodologia con los números de hoy. */}
           <p className="text-pretty text-[12.5px] leading-[1.5] text-muted-foreground">
-            {es.desglose.comoSeLee} {es.desglose.escalas(escalas)} {es.desglose.ultimosPasos}
+            {es.desglose.delaMediaALaNota}{" "}
+            <Link
+              href="/metodologia#evidencia"
+              className="underline underline-offset-4 hover:text-foreground"
+            >
+              {es.desglose.losDosPasos}
+            </Link>
             {conDesglose.some((v) => v.metricas.length < 2)
               ? ` ${es.desglose.unSoloBenchmark}`
               : ""}
+          </p>
+
+          <p className="text-pretty text-[12.5px] leading-[1.5] text-muted-foreground">
+            {es.desglose.escalas(escalas)}
           </p>
         </div>
       ) : null}

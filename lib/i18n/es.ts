@@ -96,30 +96,52 @@ export const es = {
   // este sitio entero va de no pedir fe.
   desglose: {
     titulo: "De dónde sale cada nota",
+    // El número que encabeza cada effort. Lleva etiqueta porque cae en la misma
+    // columna que los valores nivelados y no está en su misma escala: sin la
+    // palabra parecía uno más de esa columna, y no lo es.
+    calidad: "calidad",
     media: "media nivelada",
     // Cabeceras del desglose. Son cuatro columnas porque la nota tiene cuatro
     // pasos y esconder uno la volvería a hacer imposible de comprobar.
     publica: "publica",
     enLaEscala: "escala",
-    desnivel: "desnivel",
+    // "ajuste" y no "desnivel": lo que se enseña es la corrección ya con su
+    // signo, o sea el número que hay que sumarle a la columna de la izquierda.
+    // El desnivel en crudo es ese mismo número al revés, y ponerlo bajo esa
+    // palabra al lado de un texto que decía "se le resta" dejaba la fila sin
+    // cuadrar para quien intentara sumarla a mano, que es justo a quien va
+    // dirigida esta tabla.
+    ajuste: "ajuste",
     nivelado: "nivelado",
+    // Una línea por columna y en el mismo orden en que se leen. Antes era un
+    // párrafo con los cuatro pasos seguidos y la lista de extremos metida en
+    // medio, y no había forma de saber qué frase explicaba qué número.
+    columnas: {
+      publica: "lo que publica el benchmark, tal cual.",
+      enLaEscala: "ese mismo resultado, de 0 a 100, contra el peor y el mejor del conjunto.",
+      ajuste:
+        "lo que se le corrige por el desnivel de su fuente: cuánto puntúa de más o de menos que las otras sobre los modelos que comparten. Sin eso, un 70 de un benchmark y un 70 de otro no valen lo mismo, y la nota acabaría diciendo quién te midió en vez de cómo rendiste.",
+      nivelado: "lo que queda, y lo único que se promedia.",
+    },
+    // Que la media no sea la nota es la diferencia entre una cifra que se puede
+    // comprobar y una que hay que creerse. Y sobre todo: los dos números no
+    // están en la misma escala, así que restarlos de frente —«perdió diez
+    // puntos»— es leer mal los dos. Los dos pasos que faltan son iguales para
+    // todo el mundo, así que se explican una vez y se enlazan.
+    delaMediaALaNota:
+      "Esa media todavía no es la calidad. Antes pasan dos cosas más: se acerca al centro del conjunto según cuántas mediciones la sostienen, porque una media de dos se mueve más que una de tres, y después el conjunto entero se vuelve a estirar a 0-100. Por eso los dos números no se parecen: no están en la misma escala.",
+    losDosPasos: "Los dos pasos, con los números de hoy, en Metodología.",
     // Los extremos son del conjunto entero, así que son los mismos para todas
     // las filas de todos los modelos. Van una vez al final y no repetidos en
     // cada una, que es lo que hacía que esto no cupiera para cada effort.
     escala: (etiqueta: string, min: string, max: string) => `${etiqueta}, de ${min} a ${max}`,
     escalas: (lista: string) => `Las escalas salen de los extremos medidos del conjunto: ${lista}.`,
-    comoSeLee:
-      "Cada benchmark se reescala para que el peor resultado del conjunto sea 0 y el mejor 100. Después se le resta su desnivel, que es cuánto puntúa de más o de menos que los otros sobre los modelos que comparten: sin eso, un 70 de un benchmark y un 70 de otro no valen lo mismo y la nota acabaría diciendo quién te midió en vez de cómo rendiste. Lo que queda es lo que se promedia.",
-    // La media ya no es la nota, y decirlo aquí no es un detalle: es la
-    // diferencia entre una cifra que se puede comprobar y una que hay que
-    // creerse. Los dos últimos pasos son iguales para todo el mundo.
-    ultimosPasos:
-      "La nota de arriba no es esa media: antes se acerca al centro del conjunto según cuántas mediciones la sostienen, porque una media de dos se mueve más que una de tres, y después el conjunto entero se estira otra vez a 0-100.",
     // "Salvo que se baje el mínimo" y no "no puede ser respuesta" a secas: la
-    // portada deja bajarlo, y esta ficha no sabe si se ha bajado. Una frase que
-    // se contradiga con la fila de la que se viene valdría menos que ninguna.
+    // página principal deja bajarlo, y esta ficha no sabe si se ha bajado. Una
+    // frase que se contradiga con la fila de la que se viene valdría menos que
+    // ninguna.
     unSoloBenchmark:
-      "Con un solo benchmark no hay promedio que hacer: la nota es esa única medición, y es la que más se acerca al centro por eso mismo. Por eso una variante así no compite por las tres respuestas, salvo que se baje el mínimo a mano en la página principal.",
+      "Con un solo benchmark no hay promedio que hacer: la nota sale de esa única medición, y es la que más se acerca al centro por eso mismo. Por eso una variante así no compite por las tres respuestas, salvo que se baje el mínimo a mano en la página principal.",
   },
   // El $ por tarea no es un presupuesto. Sale de lo que costó resolver las
   // tareas de los benchmarks, puestas todas en la misma escala, y esa frase
