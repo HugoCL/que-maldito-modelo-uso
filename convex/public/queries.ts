@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { query } from "../_generated/server";
 import { candidatosDesdeLaBase } from "../scoring/recompute";
-import { scoreAll } from "../scoring/compute";
+import { construirEscala, escalaPublica, scoreAll } from "../scoring/compute";
 import { elegibles, elegirTarjetas, paretoFrontier } from "../scoring/tiers";
 import { aTarjeta } from "../scoring/presentar";
 import {
@@ -150,6 +150,19 @@ export const modelo = query({
       variantes: variantes.map(aTarjeta),
     };
   },
+});
+
+/**
+ * Los desniveles y el encogimiento de hoy, para /metodologia.
+ *
+ * Va aparte de `metodologia` a propósito: eso es configuración y se sirve sin
+ * tocar la base, y esto hay que calcularlo sobre el conjunto entero. Juntarlos
+ * le cobraría esa lectura a la página principal, que solo necesita la parte de
+ * configuración.
+ */
+export const escala = query({
+  args: {},
+  handler: async (ctx) => escalaPublica(construirEscala(await candidatosDesdeLaBase(ctx), Date.now())),
 });
 
 /**

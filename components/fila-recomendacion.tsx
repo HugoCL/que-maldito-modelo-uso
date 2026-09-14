@@ -21,6 +21,17 @@ import type { Tarjeta } from "@/lib/types";
  * respuesta sostenida por una sola medición y otra por tres no se pueden ver
  * igual solo porque las dos hayan salido del mismo cálculo.
  */
+/**
+ * El color de cada respuesta, el mismo que usa el gráfico. Van escritas y no
+ * compuestas (`border-l-tier-${tier}`) porque Tailwind lee las clases del código
+ * fuente: una clase que se arma en tiempo de ejecución no se genera nunca.
+ */
+const COLOR = {
+  barato: { barra: "border-l-tier-barato" },
+  dia_a_dia: { barra: "border-l-tier-dia" },
+  bueno: { barra: "border-l-tier-bueno" },
+} as const;
+
 export function FilaRecomendacion({ tarjeta, sin }: { tarjeta: Tarjeta; sin?: string }) {
   const { tier, ganador, razonCorta, alternativas } = tarjeta;
   // Las fuentes apagadas viajan con el enlace: si no, la ficha puntuaría con
@@ -37,13 +48,24 @@ export function FilaRecomendacion({ tarjeta, sin }: { tarjeta: Tarjeta; sin?: st
         // comparar en vertical, que es para lo que existe.
         "flex flex-col gap-2 border-t border-border px-4 py-5 first:border-t-0",
         "sm:grid sm:grid-cols-[150px_minmax(0,1fr)_90px_96px] sm:items-center sm:gap-6 sm:px-[22px]",
-        destacada && "border-l-[3px] border-l-primary sm:py-6",
+        // Las tres llevan su color a la izquierda, no solo la del día a día:
+        // es lo que ata cada fila con su punto en el gráfico de abajo. La del
+        // día a día se sigue distinguiendo por la barra más ancha y el cuerpo
+        // de letra, que es lo que dice cuál es la recomendación de verdad.
+        //
+        // El color va en la barra y no en el texto. Un texto de doce píxeles
+        // pintado del color de una serie casi nunca llega al contraste que pide
+        // una letra pequeña, y además el color dejaría de ser una marca al lado
+        // del dato para ser el dato.
+        "border-l-[3px]",
+        COLOR[tier].barra,
+        destacada && "sm:border-l-[5px] sm:py-6",
       )}
     >
       <span
         className={cn(
           "font-mono text-xs leading-[1.4]",
-          destacada ? "text-primary" : "text-muted-foreground",
+          destacada ? "text-foreground" : "text-muted-foreground",
         )}
       >
         {t.orden} {t.etiqueta}

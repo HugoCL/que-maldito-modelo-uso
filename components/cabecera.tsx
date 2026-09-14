@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { InterruptorTema } from "@/components/interruptor-tema";
 import { es } from "@/lib/i18n/es";
 
 /**
@@ -20,6 +21,7 @@ export function Cabecera() {
           <Link href="/estado" className="hover:text-foreground">
             {es.nav.estado}
           </Link>
+          <InterruptorTema />
         </div>
       </nav>
     </header>

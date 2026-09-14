@@ -201,12 +201,22 @@ export default defineSchema({
     costHi: v.optional(v.number()),
     /** USD por millón de tokens con la mezcla agéntica. */
     blendedPrice: v.optional(v.number()),
+    /**
+     * El desglose por benchmark, tal cual lo devuelve el cálculo. Los campos
+     * tienen que estar todos: los validadores de Convex rechazan el documento
+     * entero por un campo de más, y este se inserta al final de cada ingesta.
+     */
     metrics: v.array(
       v.object({
         metric: metricValidator,
         value: v.number(),
         normalized: v.number(),
+        /** Lo que se le descuenta a este benchmark por su desnivel. */
+        desnivel: v.number(),
         weight: v.number(),
+        /** Extremos del conjunto con los que se reescaló. */
+        min: v.number(),
+        max: v.number(),
       }),
     ),
     onFrontier: v.boolean(),

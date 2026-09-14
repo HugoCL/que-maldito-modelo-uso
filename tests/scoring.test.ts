@@ -10,7 +10,11 @@ import { parse as terminalBench } from "../convex/sources/terminalBench";
 import { buildCandidates } from "../convex/scoring/candidates";
 import {
   blendedPrice,
+  calibrateCostFactor,
+  construirEscala,
+  cuantoEncoger,
   decay,
+  resolverDesniveles,
   scoreAll,
   type Candidate,
   type Scored,
@@ -295,6 +299,260 @@ test("un mínimo raro en la URL cae en el de la metodología", () => {
   assert.equal(minimoDeBenchmarks(-3), THRESHOLDS.benchmarksMinimos);
   assert.equal(minimoDeBenchmarks(99), THRESHOLDS.benchmarksMinimos);
   assert.equal(minimoDeBenchmarks(NaN), THRESHOLDS.benchmarksMinimos);
+});
+
+// ─── la escala común ──────────────────────────────────────────────────────
+
+const mediana = (a: number[]) => {
+  const s = [...a].sort((x, y) => x - y);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
+
+/** La media que sale del desglose: lo que se promedia después de nivelar. */
+function mediaNivelada(s: Scored): number {
+  const peso = s.metricBreakdown.reduce((a, m) => a + m.weight, 0);
+  return s.metricBreakdown.reduce((a, m) => a + (m.normalized - m.desnivel) * m.weight, 0) / peso;
+}
+
+const metricasVistas = [...new Set(scored.flatMap((s) => s.metricBreakdown.map((m) => m.metric)))];
+
+/**
+ * Lo que el ajuste de desniveles deja en cero, que es lo único que promete: el
+ * residuo mediano de cada benchmark contra la nota de los modelos que mide.
+ */
+test("nivelar deja a cada benchmark sin residuo sobre los modelos que mide", () => {
+  const filas = scored.map((s) => s.metricBreakdown).filter((b) => b.length >= 2);
+  for (const k of metricasVistas) {
+    const residuos: number[] = [];
+    for (const f of filas) {
+      const mu = mediana(f.map((m) => m.normalized - m.desnivel));
+      for (const m of f) if (m.metric === k) residuos.push(m.normalized - m.desnivel - mu);
+    }
+    if (!residuos.length) continue;
+    assert.ok(Math.abs(mediana(residuos)) < 1e-9, `${k} se queda con residuo ${mediana(residuos)}`);
+  }
+});
+
+/**
+ * El desnivel corrige el nivel, no la anchura. Dos benchmarks que reparten a sus
+ * modelos en rangos distintos siguen sin cuadrar del todo, y la pareja que menos
+ * modelos comparte es la que peor queda. Lo que no puede pasar es que nivelar
+ * los separe más de lo que estaban.
+ */
+test("nivelar acerca los benchmarks entre sí, aunque no los iguale", () => {
+  const peor = (nivelado: boolean) => {
+    let max = 0;
+    for (const a of metricasVistas) {
+      for (const b of metricasVistas) {
+        if (a >= b) continue;
+        const d: number[] = [];
+        for (const s of scored) {
+          const ma = s.metricBreakdown.find((m) => m.metric === a);
+          const mb = s.metricBreakdown.find((m) => m.metric === b);
+          if (ma && mb) {
+            d.push(
+              ma.normalized - (nivelado ? ma.desnivel : 0) - (mb.normalized - (nivelado ? mb.desnivel : 0)),
+            );
+          }
+        }
+        if (d.length) max = Math.max(max, Math.abs(mediana(d)));
+      }
+    }
+    return max;
+  };
+  assert.ok(peor(true) < peor(false), `nivelar empeoró el desajuste: ${peor(false)} → ${peor(true)}`);
+});
+
+/**
+ * La razón de ser de todo esto. Antes, la calidad media BAJABA cuantos más
+ * benchmarks te hubieran medido: promediar tres escalas desniveladas castigaba
+ * justo a los que más evidencia tenían.
+ */
+test("la nota ya no premia que te hayan medido menos", () => {
+  const medias = [1, 2, 3].map((n) => {
+    const v = scored.filter((s) => s.benchmarks === n).map((s) => s.quality);
+    return v.length ? v.reduce((a, x) => a + x, 0) / v.length : undefined;
+  });
+  const conDatos = medias.filter((m): m is number => m !== undefined);
+  assert.ok(conDatos.length >= 2, "hacen falta al menos dos grupos para comparar");
+  for (let i = 1; i < conDatos.length; i++) {
+    assert.ok(
+      conDatos[i] >= conDatos[i - 1],
+      `la media con más benchmarks es menor: ${conDatos.join(" · ")}`,
+    );
+  }
+});
+
+/**
+ * Un conjunto donde los tres benchmarks dicen lo mismo de casi todos, con dos
+ * que se contradicen para que haya desacuerdo que medir. Al coincidir las tres
+ * escalas, el desnivel sale cero y lo único que distingue a `una-sola` de
+ * `las-tres` es cuánta evidencia las sostiene.
+ */
+function universoDePrueba(): Candidate[] {
+  const cand = (variantKey: string, valores: Record<string, number>): Candidate => ({
+    variantKey,
+    modelKey: variantKey,
+    modelName: variantKey,
+    creator: "Prueba",
+    effort: "default",
+    metrics: Object.entries(valores).map(([metric, value]) => ({
+      metric: metric as Candidate["metrics"][number]["metric"],
+      value,
+    })),
+    costSamples: [{ sourceId: "deepswe", costPerTask: 1 }],
+    providers: [],
+  });
+  const tres = (v: number) => ({
+    "deepswe.pass_at_1": v,
+    "cursorbench.score": v,
+    "terminalbench.accuracy": v,
+  });
+
+  return [
+    ...[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].map((v, i) => cand(`base-${i}`, tres(v))),
+    // Simétricos: dan varianza entre benchmarks sin mover ningún desnivel.
+    cand("discrepa-a", { "deepswe.pass_at_1": 0.9, "cursorbench.score": 0.1 }),
+    cand("discrepa-b", { "deepswe.pass_at_1": 0.1, "cursorbench.score": 0.9 }),
+    cand("una-sola", { "deepswe.pass_at_1": 0.9 }),
+    cand("las-tres", tres(0.9)),
+  ];
+}
+
+test("con la misma medida, más benchmarks encogen menos", () => {
+  const universo = universoDePrueba();
+  const puntuados = scoreAll(universo, AHORA);
+  const una = puntuados.find((s) => s.variantKey === "una-sola")!;
+  const tres = puntuados.find((s) => s.variantKey === "las-tres")!;
+
+  // Las tres escalas coinciden, así que no hay desnivel que repartir.
+  for (const s of puntuados) {
+    for (const m of s.metricBreakdown) assert.ok(Math.abs(m.desnivel) < 1e-9);
+  }
+  // Y las dos variantes del experimento promedian exactamente lo mismo.
+  assert.ok(Math.abs(mediaNivelada(una) - mediaNivelada(tres)) < 1e-9);
+
+  assert.equal(una.benchmarks, 1);
+  assert.equal(tres.benchmarks, 3);
+  assert.ok(
+    tres.quality > una.quality,
+    `la sostenida por tres (${tres.quality}) debería quedar por encima de la de una (${una.quality})`,
+  );
+});
+
+/**
+ * El ajuste se fue a 1e+36 la primera vez por esto: una fila con una sola
+ * lectura tiene un residuo que vale exactamente su propio desnivel, así que si
+ * se la deja opinar se retroalimenta y lo duplica en cada vuelta.
+ */
+test("el desnivel no se dispara aunque casi nadie tenga dos lecturas", () => {
+  const filas = [
+    ...Array.from({ length: 40 }, (_, i) => ({ ns: [{ k: "a", v: i / 40 }] })),
+    { ns: [{ k: "a", v: 0.5 }, { k: "b", v: 0.3 }] },
+    { ns: [{ k: "a", v: 0.7 }, { k: "b", v: 0.5 }] },
+  ];
+  const d = resolverDesniveles(filas, ["a", "b"], "a");
+  assert.equal(d.a, 0);
+  assert.ok(Number.isFinite(d.b), `desnivel no finito: ${d.b}`);
+  assert.ok(Math.abs(d.b + 0.2) < 1e-9, `esperaba -0.2, salió ${d.b}`);
+});
+
+test("sin nada con qué comparar no se encoge nada", () => {
+  assert.equal(cuantoEncoger([]), 0);
+  assert.equal(cuantoEncoger([[0.5]]), 0, "una sola lectura no dice nada del desacuerdo");
+  assert.equal(cuantoEncoger([[0.5, 0.5], [0.5, 0.5]]), 0, "sin varianza entre modelos, no se divide");
+});
+
+// ─── el costo en una sola escala ──────────────────────────────────────────
+
+/**
+ * Las tareas de un benchmark no son las de otro. Si Terminal-Bench cuesta el
+ * doble que DeepSWE para todo el mundo, dos variantes igual de eficientes tienen
+ * que salir al mismo precio aunque las haya costeado una fuente distinta.
+ */
+test("el costo no depende de qué benchmark lo costeó", () => {
+  const cand = (variantKey: string, costSamples: Candidate["costSamples"]): Candidate => ({
+    variantKey,
+    modelKey: variantKey,
+    modelName: variantKey,
+    creator: "Prueba",
+    effort: "default",
+    metrics: [{ metric: "deepswe.pass_at_1", value: 0.5 }],
+    costSamples,
+    providers: [],
+  });
+
+  const universo: Candidate[] = [
+    ...[1, 2, 4, 8, 16, 32].map((c, i) =>
+      cand(`par-${i}`, [
+        { sourceId: "deepswe", costPerTask: c },
+        { sourceId: "terminalbench", costPerTask: c * 2 },
+      ]),
+    ),
+    cand("solo-deepswe", [{ sourceId: "deepswe", costPerTask: 3 }]),
+    cand("ancla", [{ sourceId: "deepswe", costPerTask: 5 }]),
+    cand("solo-terminalbench", [{ sourceId: "terminalbench", costPerTask: 6 }]),
+  ];
+
+  const escala = construirEscala(universo, AHORA);
+  assert.ok(
+    Math.abs(Math.exp(escala.desnivelesDeCosto.terminalbench) - 2) < 1e-9,
+    `Terminal-Bench debería salir ×2, salió ×${Math.exp(escala.desnivelesDeCosto.terminalbench)}`,
+  );
+
+  const puntuados = scoreAll(universo, AHORA);
+  const ds = puntuados.find((s) => s.variantKey === "solo-deepswe")!;
+  const tb = puntuados.find((s) => s.variantKey === "solo-terminalbench")!;
+  assert.ok(ds.costMeasured && tb.costMeasured);
+  assert.ok(
+    Math.abs(ds.cost! - tb.cost!) < 1e-9,
+    `misma eficiencia, distinto precio: ${ds.cost} vs ${tb.cost}`,
+  );
+});
+
+test("una lectura de costo en cero no se cuela como ganga", () => {
+  const uno: Candidate = {
+    variantKey: "x@default",
+    modelKey: "x",
+    modelName: "X",
+    creator: "Nadie",
+    effort: "default",
+    metrics: [{ metric: "deepswe.pass_at_1", value: 0.5 }],
+    costSamples: [{ sourceId: "deepswe", costPerTask: 0 }],
+    pricing: { input: 3, output: 15, cacheRead: 0.3 },
+    providers: [],
+  };
+  const [s] = scoreAll([uno], AHORA);
+  assert.equal(s.costMeasured, false, "un cero no es un costo medido");
+  assert.ok(s.cost === undefined || s.cost > 0, `costo imposible: ${s.cost}`);
+});
+
+/**
+ * El ajuste anterior sumaba cuadrados, así que los modelos de veinte dólares la
+ * tarea pesaban cientos de veces más que los de treinta centavos y ponían ellos
+ * solos el factor.
+ */
+test("la calibración no la pone media docena de modelos caros", () => {
+  const cand = (variantKey: string, precio: number, medido: number): Candidate => ({
+    variantKey,
+    modelKey: variantKey,
+    modelName: variantKey,
+    creator: "Prueba",
+    effort: "default",
+    metrics: [{ metric: "deepswe.pass_at_1", value: 0.5 }],
+    costSamples: [{ sourceId: "deepswe", costPerTask: medido }],
+    // Sin caché: el precio mezclado es 0.75*input + 0.25*output. Con los dos
+    // iguales sale exactamente `precio`.
+    pricing: { input: precio, output: precio },
+    providers: [],
+  });
+
+  const tipicos = [0.2, 0.3, 0.5, 0.8, 1, 1.5, 2, 3].map((p, i) => cand(`tipico-${i}`, p, p * 2));
+  const caros = [40, 60].map((p, i) => cand(`caro-${i}`, p, p * 20));
+
+  const factor = calibrateCostFactor([...tipicos, ...caros], {})!;
+  assert.ok(Math.abs(factor - 2) < 1e-9, `el factor se fue a ${factor} en vez de 2`);
 });
 
 // ─── casos límite ─────────────────────────────────────────────────────────

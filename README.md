@@ -96,6 +96,35 @@ benchmarks que hacen falta para ser una respuesta, y la fuente entera no cambia 
 redistribuir. El adapter está escrito en `convex/sources/artificialAnalysis.ts` con
 `enabled: false`; se enciende el día que haya licencia comercial o permiso escrito.
 
+## La escala común
+
+Cada benchmark mide a quien puede, y no todos miden al mismo grupo. El que también mide a los
+modelos flojos tiene el suelo más abajo, así que reescalar a 0–100 contra el peor y el mejor de
+*su* grupo deja tres escalas que no cuadran: un 70 de uno y un 70 de otro no valían lo mismo, y al
+promediarlos la nota acababa diciendo **quién te midió** en vez de cómo rendiste.
+
+Así que antes de promediar se mide cuánto puntúa de más o de menos cada benchmark sobre **los
+modelos que comparte con otro** y se le resta. Es una resta, la misma para todos los modelos que
+mide esa fuente: corrige el nivel sin tocar cuánto manda ese benchmark en la nota. El ancla es la
+fuente de mayor cobertura, así que lo que se mueve es lo que mide a menos gente.
+
+Después, cada nota se acerca al centro del conjunto según **cuántos benchmarks la sostienen**. Una
+media de dos se mueve más que una de tres, y sin corregirlo los extremos de la tabla se llenan de
+modelos con poca evidencia, que no es lo mismo que modelos buenos. Cuánto se acerca no lo elegimos:
+sale de dividir cuánto se contradicen los benchmarks entre sí por cuánto se diferencian los
+modelos. Si coincidieran siempre, no habría nada que corregir.
+
+Las dos correcciones se calculan sobre el universo entero, nunca sobre lo que dejen tus filtros.
+[/metodologia](app/metodologia/page.tsx) publica los desniveles de hoy, el divisor del
+encogimiento y la pareja de benchmarks que peor cuadra pese a todo: la resta arregla el nivel, no
+la anchura, y callarlo sería el mismo pecado que este archivo dice no cometer.
+
+El costo tiene la misma enfermedad y el mismo tratamiento. Las tareas de un benchmark no son las de
+otro, así que el mismo modelo cuesta distinto según quién lo costeara; se nivela igual, sobre los
+modelos que las fuentes comparten, salvo que ahí la diferencia es multiplicativa. Lo que sale de
+todo eso es un **índice de eficiencia**: sirve para ordenar modelos entre sí, no para estimar tu
+factura.
+
 ## Los pesos
 
 **Todos los benchmarks que entran pesan lo mismo.** Nadie sabe si CursorBench vale exactamente
@@ -172,11 +201,17 @@ donde hay que discutir.
 pnpm test
 ```
 
-61 tests contra fixtures reales capturados de cada fuente (`tests/fixtures/`). Cubren los
+80 tests contra fixtures reales capturados de cada fuente (`tests/fixtures/`). Cubren los
 parsers, la resolución de nombres y las propiedades del scoring: que nunca se recomiende una
 variante dominada, que las tres respuestas sean siempre tres modelos distintos y en orden de
 precio, que dos modelos con intervalos solapados se desempaten por costo, y que bajar el mínimo de
 benchmarks solo añada candidatos, nunca quite, y los añada marcados.
+
+Y las de la escala común, que son las que impiden que vuelva a colarse lo de antes: que nivelar
+deje a cada benchmark sin residuo sobre los modelos que mide, que la calidad media no baje al subir
+la evidencia, que con la misma medida la nota sostenida por tres benchmarks quede por encima de la
+sostenida por uno, y que dos variantes igual de eficientes salgan al mismo precio aunque las haya
+costeado una fuente distinta.
 
 Un cambio de maquetación río arriba rompe un test, no la producción.
 

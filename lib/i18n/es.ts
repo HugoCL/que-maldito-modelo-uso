@@ -22,6 +22,12 @@ export const es = {
     creditos: "Créditos",
     estado: "Estado",
   },
+  tema: {
+    sistema: "el del sistema",
+    claro: "claro",
+    oscuro: "oscuro",
+    cambiar: (siguiente: string) => `Cambiar al tema ${siguiente}`,
+  },
   // Cada tier aparece en dos sitios con dos voces: `etiqueta`/`nota` en la
   // columna izquierda de la portada, en minúscula y monoespaciada, y
   // `titulo`/`subtitulo` cuando hay sitio para una frase entera.
@@ -80,19 +86,39 @@ export const es = {
   // este sitio entero va de no pedir fe.
   desglose: {
     titulo: "De dónde sale cada nota",
-    media: "media",
+    media: "media nivelada",
+    // Cabeceras del desglose. Son cuatro columnas porque la nota tiene cuatro
+    // pasos y esconder uno la volvería a hacer imposible de comprobar.
+    publica: "publica",
+    enLaEscala: "escala",
+    desnivel: "desnivel",
+    nivelado: "nivelado",
     // Los extremos son del conjunto entero, así que son los mismos para todas
     // las filas de todos los modelos. Van una vez al final y no repetidos en
     // cada una, que es lo que hacía que esto no cupiera para cada effort.
     escala: (etiqueta: string, min: string, max: string) => `${etiqueta}, de ${min} a ${max}`,
     escalas: (lista: string) => `Las escalas salen de los extremos medidos del conjunto: ${lista}.`,
     comoSeLee:
-      "Cada benchmark se reescala para que el peor resultado del conjunto sea 0 y el mejor 100, y luego se promedian. Sin reescalar, un benchmark donde todos sacan entre 60 y 70 movería la nota tanto como uno donde van de 5 a 95.",
+      "Cada benchmark se reescala para que el peor resultado del conjunto sea 0 y el mejor 100. Después se le resta su desnivel, que es cuánto puntúa de más o de menos que los otros sobre los modelos que comparten: sin eso, un 70 de un benchmark y un 70 de otro no valen lo mismo y la nota acabaría diciendo quién te midió en vez de cómo rendiste. Lo que queda es lo que se promedia.",
+    // La media ya no es la nota, y decirlo aquí no es un detalle: es la
+    // diferencia entre una cifra que se puede comprobar y una que hay que
+    // creerse. Los dos últimos pasos son iguales para todo el mundo.
+    ultimosPasos:
+      "La nota de arriba no es esa media: antes se acerca al centro del conjunto según cuántas mediciones la sostienen, porque una media de dos se mueve más que una de tres, y después el conjunto entero se estira otra vez a 0-100.",
     // "Salvo que se baje el mínimo" y no "no puede ser respuesta" a secas: la
     // portada deja bajarlo, y esta ficha no sabe si se ha bajado. Una frase que
     // se contradiga con la fila de la que se viene valdría menos que ninguna.
     unSoloBenchmark:
-      "Con un solo benchmark no hay promedio que hacer: la nota es esa única medición. Por eso una variante así no compite por las tres respuestas, salvo que se baje el mínimo a mano en la portada.",
+      "Con un solo benchmark no hay promedio que hacer: la nota es esa única medición, y es la que más se acerca al centro por eso mismo. Por eso una variante así no compite por las tres respuestas, salvo que se baje el mínimo a mano en la página principal.",
+  },
+  // El $ por tarea no es un presupuesto. Sale de lo que costó resolver las
+  // tareas de los benchmarks, puestas todas en la misma escala, y esa frase
+  // tiene que estar donde está el número y no solo en /metodologia.
+  indice: {
+    corto: "índice de eficiencia",
+    ayuda:
+      "Lo que costó resolver las tareas de los benchmarks, con las tres fuentes puestas en la misma escala. Sirve para comparar modelos entre sí; no es lo que vas a pagar tú, que depende de tu repo, de tu prompt y de tu harness.",
+    enElGlobo: "escala común entre benchmarks",
   },
   filtros: {
     titulo: "¿Para qué lo quieres?",
@@ -172,8 +198,13 @@ export const es = {
     calidad: "calidad",
     porTarea: "/tarea",
     deCien: "/100",
+    // La línea de arriba del titular. Dice de dónde salen los números y de
+    // cuándo son, que es lo único que hace falta saber antes de leerlos. En
+    // trozos porque en estrecho no caben los tres y hay que poder quitar uno.
+    benchmarks: (n: number) => (n === 1 ? "1 benchmark" : `${n} benchmarks`),
+    variantes: (n: number) => (n === 1 ? "1 variante puntuada" : `${n} variantes puntuadas`),
     pieDeTabla: (benchmarks: number) =>
-      `calidad ponderada por ${benchmarks} benchmarks · costo medido por tarea`,
+      `calidad de ${benchmarks} benchmarks nivelados · el $/tarea es un índice, no tu factura`,
     ejes: (elegibles: number, enFrontera: number) =>
       `calidad × costo · ${elegibles} variantes · ${enFrontera} en el frontier`,
     ejesCorto: (elegibles: number) => `calidad × costo · ${elegibles} variantes`,

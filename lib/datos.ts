@@ -1,8 +1,9 @@
 import "server-only";
+import { cache } from "react";
 import { fetchQuery } from "convex/nextjs";
 import { makeFunctionReference } from "convex/server";
 import { metricasExcluidas, minimoDeBenchmarks } from "../convex/scoring/config";
-import { scoreAll } from "../convex/scoring/compute";
+import { construirEscala, escalaPublica, scoreAll } from "../convex/scoring/compute";
 import { aplicarFiltrosDeCatalogo } from "../convex/scoring/filtros";
 import { aTarjeta } from "../convex/scoring/presentar";
 import { elegibles, elegirTarjetas, paretoFrontier } from "../convex/scoring/tiers";
@@ -13,6 +14,7 @@ import {
   MODELOS_SEMILLA,
 } from "./datos-semilla";
 import type {
+  EscalaPublica,
   EstadoDelPipeline,
   FichaDeModelo,
   Metodologia,
@@ -43,6 +45,7 @@ const consultas = {
   recomendaciones: makeFunctionReference<"query">("public/queries:recomendaciones"),
   modelo: makeFunctionReference<"query">("public/queries:modelo"),
   metodologia: makeFunctionReference<"query">("public/queries:metodologia"),
+  escala: makeFunctionReference<"query">("public/queries:escala"),
   listaVariantes: makeFunctionReference<"query">("public/queries:listaVariantes"),
   estado: makeFunctionReference<"query">("ingest/runs:estado"),
 };
@@ -75,10 +78,31 @@ export type FiltrosDeRecomendacion = {
   ocultos?: string[];
 };
 
-export async function obtenerRecomendaciones(
+/**
+ * Las recomendaciones, una sola vez por petición y juego de filtros.
+ *
+ * La portada las pide desde dos sitios —el titular, para decir cuál es la
+ * respuesta de hoy, y la tabla— y sin esto serían dos viajes a Convex por los
+ * mismos datos. `cache` de React compara los argumentos por identidad, así que
+ * la clave que se le pasa es una cadena y no el objeto de filtros, que llega
+ * recién construido desde cada sitio que llama.
+ */
+const recomendacionesPorClave = cache((clave: string): Promise<Recomendaciones> => {
+  const filtros = JSON.parse(clave) as FiltrosDeRecomendacion;
+  return pedirAConvex(consultas.recomendaciones, { ...filtros }, sobreLaSemilla(filtros));
+});
+
+export function obtenerRecomendaciones(
   filtros: FiltrosDeRecomendacion = {},
 ): Promise<Recomendaciones> {
-  return pedirAConvex(consultas.recomendaciones, { ...filtros }, sobreLaSemilla(filtros));
+  // Las claves, ordenadas: `{sin, minimo}` y `{minimo, sin}` son el mismo
+  // filtro y tienen que dar el mismo viaje.
+  const ordenado = Object.fromEntries(
+    Object.entries(filtros)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b)),
+  );
+  return recomendacionesPorClave(JSON.stringify(ordenado));
 }
 
 /**
@@ -139,6 +163,19 @@ export async function obtenerVariantes(sin?: string[]): Promise<Variante[]> {
 
 export async function obtenerMetodologia(): Promise<Metodologia> {
   return pedirAConvex(consultas.metodologia, {}, METODOLOGIA_SEMILLA);
+}
+
+/**
+ * Los desniveles y el encogimiento de hoy. El respaldo no es una copia guardada
+ * sino el mismo cálculo sobre la instantánea, igual que las recomendaciones:
+ * una escala congelada explicaría unas notas que ya no son las que se ven.
+ */
+export async function obtenerEscala(): Promise<EscalaPublica> {
+  return pedirAConvex(
+    consultas.escala,
+    {},
+    escalaPublica(construirEscala(CANDIDATOS_SEMILLA, Date.now())),
+  );
 }
 
 export async function obtenerModelo(

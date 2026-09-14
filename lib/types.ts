@@ -17,6 +17,11 @@ export type MetricaDeVariante = {
   peso: number;
   /** El mismo resultado reescalado de 0 a 100 contra los extremos del conjunto. */
   normalizado: number;
+  /**
+   * Lo que se le resta a este benchmark por puntuar más alto o más bajo que los
+   * demás sobre los modelos que comparten, en puntos de esa misma escala.
+   */
+  desnivel: number;
   /** Peor y mejor resultado medidos en este benchmark, en porcentaje. */
   minimo: number;
   maximo: number;
@@ -92,6 +97,24 @@ export type Modelo = {
 };
 
 export type FichaDeModelo = Modelo & { variantes: Variante[] };
+
+/**
+ * Lo que se mide del conjunto entero para poder comparar entre benchmarks.
+ *
+ * Lo pide /metodologia, que tiene prohibido escribir una cifra a mano: estos
+ * números cambian con los datos de cada día y una página que explica el cálculo
+ * no se puede quedar contando el cálculo del mes pasado.
+ */
+export type EscalaPublica = {
+  /** Cuánto puntúa de más cada benchmark, en puntos de la escala de 0 a 100. */
+  desniveles: Record<string, number>;
+  /** Cuánto cuestan las tareas de cada fuente respecto al ancla, como factor. */
+  costePorFuente: Record<string, number>;
+  /** El centro del conjunto, de 0 a 100, al que tiran las notas con poca evidencia. */
+  centro: number;
+  /** Cuánto tiran: varianza entre benchmarks del mismo modelo / varianza entre modelos. */
+  k: number;
+};
 
 export type Fuente = {
   id: string;
