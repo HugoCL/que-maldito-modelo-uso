@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { igual, soloLoQueCambia } from "../convex/ingest/store";
+import { igual, soloLoQueCambia } from "../convex/ingest/comparar";
 
 /**
  * El filtro de escrituras del catálogo.
