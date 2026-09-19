@@ -47,11 +47,54 @@ function fusionar<T extends object>(previo: T, nuevo: Partial<T>): Partial<T> {
   return out as Partial<T>;
 }
 
+type Campos = Record<string, unknown>;
+
+/**
+ * Igualdad por valor, sin pasar por JSON.
+ *
+ * `JSON.stringify` no sirve aquí: Convex guarda las claves de un objeto
+ * ordenadas y el parser las produce en el orden en que las escribió, así que
+ * dos `pricing` idénticos salían como cadenas distintas y todo el catálogo
+ * parecía cambiar cada día. Un campo ausente y uno en `undefined` son lo mismo
+ * por la misma razón: Convex no guarda los `undefined`.
+ */
+export function igual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return (
+      Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => igual(x, b[i]))
+    );
+  }
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  const claves = (o: Campos) => Object.keys(o).filter((k) => o[k] !== undefined);
+  const ka = claves(a as Campos);
+  const kb = claves(b as Campos);
+  return ka.length === kb.length && ka.every((k) => igual((a as Campos)[k], (b as Campos)[k]));
+}
+
+/**
+ * De los campos propuestos, los que de verdad cambian algo.
+ *
+ * models.dev republica su JSON entero a diario y casi siempre se mueven dos o
+ * tres modelos. Sin este filtro cada run reescribía los cientos de filas del
+ * catálogo —aunque solo fuera para ponerles un `updatedAt` nuevo—, y cada una
+ * de esas escrituras invalida el cache de consultas de Convex, así que la web
+ * volvía a calcularlo todo desde cero aunque no hubiera cambiado nada.
+ */
+export function soloLoQueCambia<T extends object>(previo: T, cambios: Partial<T>): Partial<T> {
+  const out: Campos = {};
+  for (const [k, val] of Object.entries(cambios)) {
+    if (!igual((previo as Campos)[k], val)) out[k] = val;
+  }
+  return out as Partial<T>;
+}
+
 export const upsertCatalogo = internalMutation({
   args: { entries: v.array(catalogEntry), primaria: v.boolean() },
   handler: async (ctx, { entries, primaria }) => {
     let creados = 0;
     let actualizados = 0;
+    let intactos = 0;
 
     for (const e of entries) {
       const previo = await ctx.db
@@ -82,11 +125,21 @@ export const upsertCatalogo = internalMutation({
             providers: [...new Set([...(previo.providers ?? []), ...(e.providers ?? [])])].sort(),
           });
 
-      await ctx.db.patch(previo._id, { ...cambios, updatedAt: Date.now() });
+      const nuevos = soloLoQueCambia(previo, cambios);
+      // Sin cambios no se toca la fila, y eso incluye `updatedAt`: el campo
+      // pasa a decir cuándo cambió el modelo, que es lo que su nombre promete.
+      if (Object.keys(nuevos).length === 0) {
+        intactos++;
+        continue;
+      }
+
+      await ctx.db.patch(previo._id, { ...nuevos, updatedAt: Date.now() });
       actualizados++;
     }
 
-    return { creados, actualizados };
+    // `actualizados` cuenta filas que de verdad cambiaron, así que en /estado
+    // el número de un catálogo es «qué se movió hoy» y no «cuántos modelos hay».
+    return { creados, actualizados, intactos };
   },
 });
 

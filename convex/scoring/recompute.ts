@@ -1,36 +1,64 @@
 import { internalMutation } from "../_generated/server";
-import type { QueryCtx } from "../_generated/server";
-import type { Id } from "../_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
+import type { Doc, Id } from "../_generated/dataModel";
 import type { Candidate } from "./compute";
 import { scoreAll } from "./compute";
 import { elegirTarjetas } from "./tiers";
 
+/** Cuántos candidatos van en cada fila de la tabla `candidatos`. */
+const POR_TROZO = 150;
+
 /**
- * Arma los candidatos a partir de lo que hay en la base y guarda el resultado.
+ * Los candidatos que usa una consulta pública.
  *
- * La misma función pura que usa el script de previsualización hace el trabajo,
- * así que lo que se ve en la web y lo que se ve en la terminal no pueden
- * divergir.
+ * Salen del cache que deja cada run, que es una fila por cada 150. Si no hay
+ * cache —base recién sembrada, o un despliegue anterior a esta tabla— se arman
+ * en vivo: es más caro, pero una web en blanco esperando a que el cron pase a
+ * las 6 UTC sería peor.
+ */
+export async function candidatosParaConsulta(ctx: QueryCtx): Promise<Candidate[]> {
+  const partes = await ctx.db.query("candidatos").withIndex("by_parte").collect();
+  if (partes.length === 0) return await candidatosDesdeLaBase(ctx);
+  return partes.flatMap((p) => p.trozo);
+}
+
+/**
+ * Arma los candidatos leyendo la base.
+ *
+ * Se entra por `observations` y no por `variants` a propósito. Una variante
+ * sin mediciones no es candidata, y hay dos fuentes de ellas: modelos que se
+ * cayeron de un leaderboard —su variante se queda para siempre, las
+ * observaciones no— y modelos del catálogo que nadie midió nunca. Barriendo
+ * `models` y `variants` enteras se leían cientos de documentos para descartar
+ * casi todos; desde las observaciones se lee exactamente lo que se usa.
+ *
+ * El orden final es por `variantKey` y no el que traiga la base: los empates de
+ * calidad se rompen por posición en el array, así que dejarlo al orden de
+ * inserción hacía que la respuesta pudiera cambiar sin que cambiara ningún dato.
  */
 export async function candidatosDesdeLaBase(ctx: QueryCtx): Promise<Candidate[]> {
-  const modelos = await ctx.db.query("models").collect();
-  const porId = new Map(modelos.map((m) => [m._id, m]));
-
-  const variantes = await ctx.db.query("variants").collect();
   const observaciones = await ctx.db.query("observations").collect();
 
-  const porVariante = new Map<string, typeof observaciones>();
+  const porVariante = new Map<Id<"variants">, typeof observaciones>();
   for (const o of observaciones) {
-    const lista = porVariante.get(o.variantId) ?? [];
-    lista.push(o);
-    porVariante.set(o.variantId, lista);
+    const lista = porVariante.get(o.variantId);
+    if (lista) lista.push(o);
+    else porVariante.set(o.variantId, [o]);
   }
 
+  // Un mismo modelo tiene varias variantes; se lee una sola vez.
+  const modelos = new Map<Id<"models">, Doc<"models"> | null>();
+  const modeloDe = async (id: Id<"models">) => {
+    if (!modelos.has(id)) modelos.set(id, await ctx.db.get(id));
+    return modelos.get(id) ?? null;
+  };
+
   const candidatos: Candidate[] = [];
-  for (const variante of variantes) {
-    const modelo = porId.get(variante.modelId);
-    const obs = porVariante.get(variante._id);
-    if (!modelo || !obs?.length) continue;
+  for (const [variantId, obs] of porVariante) {
+    const variante = await ctx.db.get(variantId);
+    if (!variante) continue;
+    const modelo = await modeloDe(variante.modelId);
+    if (!modelo) continue;
 
     // Si dos fuentes miden la misma métrica, se queda la lectura más alta:
     // cada una usa su andamio y la más baja suele hablar del andamio, no del
@@ -64,7 +92,21 @@ export async function candidatosDesdeLaBase(ctx: QueryCtx): Promise<Candidate[]>
     });
   }
 
-  return candidatos;
+  return candidatos.sort((a, b) => a.variantKey.localeCompare(b.variantKey));
+}
+
+/** Rehace el cache de candidatos: fuera el de ayer, dentro el de hoy. */
+async function guardarCandidatos(ctx: MutationCtx, candidatos: Candidate[], ahora: number) {
+  for (const viejo of await ctx.db.query("candidatos").collect()) {
+    await ctx.db.delete(viejo._id);
+  }
+  for (let i = 0; i < candidatos.length; i += POR_TROZO) {
+    await ctx.db.insert("candidatos", {
+      parte: i / POR_TROZO,
+      generadoEn: ahora,
+      trozo: candidatos.slice(i, i + POR_TROZO),
+    });
+  }
 }
 
 export const recalcular = internalMutation({
@@ -74,57 +116,19 @@ export const recalcular = internalMutation({
     if (candidatos.length === 0) return { candidatos: 0, tarjetas: 0 };
 
     const ahora = Date.now();
-    // Lo que se guarda es el resultado del cálculo de hoy; la web lo recalcula en vivo
-    // cuando alguien mueve un filtro, sobre los mismos datos.
-    const puntuados = scoreAll(candidatos, ahora);
-    const tarjetas = elegirTarjetas(puntuados);
 
-    const variantes = await ctx.db.query("variants").collect();
-    const idPorClave = new Map(variantes.map((v) => [v.variantKey, v._id]));
+    // Las entradas del cálculo, para que las consultas públicas no tengan que
+    // rearmarlas leyendo tres tablas enteras en cada visita. Ver la tabla
+    // `candidatos` en schema.ts.
+    await guardarCandidatos(ctx, candidatos, ahora);
 
-    for (const viejo of await ctx.db.query("scores").collect()) {
-      await ctx.db.delete(viejo._id);
-    }
-    for (const s of puntuados) {
-      const variantId = idPorClave.get(s.variantKey);
-      if (!variantId) continue;
-      await ctx.db.insert("scores", {
-        variantId,
-        quality: s.quality,
-        qualityLo: s.qualityLo,
-        qualityHi: s.qualityHi,
-        coverage: s.coverage,
-        confidence: s.confidence,
-        cost: s.cost,
-        costMeasured: s.costMeasured,
-        costLo: s.costLo,
-        costHi: s.costHi,
-        blendedPrice: s.blendedPrice,
-        metrics: s.metricBreakdown,
-        onFrontier: false,
-        computedAt: ahora,
-      });
-    }
-
-    for (const viejo of await ctx.db.query("rankings").collect()) {
-      await ctx.db.delete(viejo._id);
-    }
-    for (const t of tarjetas) {
-      const variantId = idPorClave.get(t.ganador.variantKey);
-      if (!variantId) continue;
-      await ctx.db.insert("rankings", {
-        tier: t.tier,
-        variantId,
-        alternativeVariantIds: t.alternativas
-          .map((a) => idPorClave.get(a.variantKey))
-          .filter((id): id is Id<"variants"> => id !== undefined),
-        quality: t.ganador.quality,
-        cost: t.ganador.cost,
-        costMeasured: t.ganador.costMeasured,
-        rationale: t.razon,
-        computedAt: ahora,
-      });
-    }
+    // El resultado del cálculo no se guarda en ningún lado: los filtros de la
+    // web vuelven a elegir sobre el subconjunto, así que una tabla de scores y
+    // rankings sin filtros no responde ninguna pregunta que alguien haga. Se
+    // calcula igual, sobre los candidatos que ya están en memoria y sin leer
+    // nada más, porque es el mismo camino que recorre la consulta pública: si
+    // hoy se rompe, el run se cae aquí y no en la primera visita.
+    const tarjetas = elegirTarjetas(scoreAll(candidatos, ahora));
 
     return { candidatos: candidatos.length, tarjetas: tarjetas.length };
   },

@@ -31,11 +31,40 @@ export const metricValidator = v.union(
   ...METRICS.map((m) => v.literal(m)),
 );
 
-export const tierValidator = v.union(
-  v.literal("barato"),
-  v.literal("dia_a_dia"),
-  v.literal("bueno"),
-);
+/** USD por millón de tokens. Lo comparten el catálogo y el cache de candidatos. */
+export const pricingValidator = v.object({
+  input: v.optional(v.number()),
+  output: v.optional(v.number()),
+  cacheRead: v.optional(v.number()),
+  cacheWrite: v.optional(v.number()),
+});
+
+/**
+ * Un candidato: una variante con todo lo que el cálculo necesita de ella y
+ * nada más. Es la proyección de `models` + `variants` + `observations` que
+ * consume `scoreAll`, y lo que se guarda en la tabla `candidatos`.
+ */
+export const candidatoValidator = v.object({
+  variantKey: v.string(),
+  modelKey: v.string(),
+  modelName: v.string(),
+  creator: v.string(),
+  effort: effortValidator,
+  metrics: v.array(
+    v.object({
+      metric: metricValidator,
+      value: v.number(),
+      ciLo: v.optional(v.number()),
+      ciHi: v.optional(v.number()),
+      measuredAt: v.optional(v.string()),
+    }),
+  ),
+  costSamples: v.array(v.object({ sourceId: v.string(), costPerTask: v.number() })),
+  pricing: v.optional(pricingValidator),
+  providers: v.array(v.string()),
+  openWeights: v.optional(v.boolean()),
+  programmingRank: v.optional(v.number()),
+});
 
 export default defineSchema({
   /** Estado de cada fuente. La definición vive en sources/registry.ts. */
@@ -106,14 +135,7 @@ export default defineSchema({
     contextLimit: v.optional(v.number()),
     outputLimit: v.optional(v.number()),
     /** USD por millón de tokens. */
-    pricing: v.optional(
-      v.object({
-        input: v.optional(v.number()),
-        output: v.optional(v.number()),
-        cacheRead: v.optional(v.number()),
-        cacheWrite: v.optional(v.number()),
-      }),
-    ),
+    pricing: v.optional(pricingValidator),
     /** Efforts que el modelo realmente acepta, según models.dev/OpenRouter. */
     supportedEfforts: v.optional(v.array(v.string())),
     /** Proveedores donde está disponible (ids de OpenRouter u otros). */
@@ -185,58 +207,28 @@ export default defineSchema({
     timesSeen: v.number(),
   }).index("by_source_key", ["sourceId", "sourceKey"]),
 
-  /** Resultado del scoring por variante, recalculado en cada corrida. */
-  scores: defineTable({
-    variantId: v.id("variants"),
-    quality: v.number(),
-    qualityLo: v.number(),
-    qualityHi: v.number(),
-    /** Suma de pesos de las métricas que sí tenía. 1.0 = cobertura total. */
-    coverage: v.number(),
-    confidence: v.union(v.literal("alta"), v.literal("media"), v.literal("baja")),
-    /** USD por tarea. Medido si costMeasured, estimado si no. */
-    cost: v.optional(v.number()),
-    costMeasured: v.boolean(),
-    costLo: v.optional(v.number()),
-    costHi: v.optional(v.number()),
-    /** USD por millón de tokens con la mezcla agéntica. */
-    blendedPrice: v.optional(v.number()),
-    /**
-     * El desglose por benchmark, tal cual lo devuelve el cálculo. Los campos
-     * tienen que estar todos: los validadores de Convex rechazan el documento
-     * entero por un campo de más, y este se inserta al final de cada ingesta.
-     */
-    metrics: v.array(
-      v.object({
-        metric: metricValidator,
-        value: v.number(),
-        normalized: v.number(),
-        /** Lo que se le descuenta a este benchmark por su desnivel. */
-        desnivel: v.number(),
-        weight: v.number(),
-        /** Extremos del conjunto con los que se reescaló. */
-        min: v.number(),
-        max: v.number(),
-      }),
-    ),
-    onFrontier: v.boolean(),
-    computedAt: v.number(),
-  })
-    .index("by_variantId", ["variantId"])
-    .index("by_computedAt", ["computedAt"]),
-
-  /** Las tres respuestas, sin filtros. Los filtros se recalculan en vivo. */
-  rankings: defineTable({
-    tier: tierValidator,
-    variantId: v.id("variants"),
-    /** Las otras respuestas de ese tier, en orden, por si la primera no se puede usar. */
-    alternativeVariantIds: v.array(v.id("variants")),
-    quality: v.number(),
-    cost: v.optional(v.number()),
-    costMeasured: v.boolean(),
-    rationale: v.string(),
-    computedAt: v.number(),
-  })
-    .index("by_tier_computedAt", ["tier", "computedAt"])
-    .index("by_computedAt", ["computedAt"]),
+  /**
+   * El conjunto de candidatos ya armado, en trozos.
+   *
+   * No es un resultado: son las ENTRADAS del cálculo, la unión de `models`,
+   * `variants` y `observations` reducida a los campos que `scoreAll` mira. Se
+   * rehace en cada run y las consultas públicas leen de aquí.
+   *
+   * Existe por I/O. Armarlo en vivo obligaba a leer las tres tablas enteras en
+   * cada visita, y el catálogo tiene cientos de modelos de los que los
+   * benchmarks miden unas decenas: la mayor parte de esos bytes se leían para
+   * tirarlos. Guardar el resultado en vez de las entradas no servía: los
+   * filtros de la web vuelven a elegir sobre el subconjunto, así que harían
+   * falta tantas copias como combinaciones de filtros.
+   *
+   * En trozos porque un documento de Convex tiene un techo de 1 MiB y esto
+   * crece con cada modelo que alguien mida. Partirlo cuesta diez líneas; que
+   * la ingesta empiece a fallar el día que no quepa, bastante más.
+   */
+  candidatos: defineTable({
+    /** Número de trozo, desde 0. Ver `POR_TROZO` en scoring/recompute.ts. */
+    parte: v.number(),
+    generadoEn: v.number(),
+    trozo: v.array(candidatoValidator),
+  }).index("by_parte", ["parte"]),
 });

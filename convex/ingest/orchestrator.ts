@@ -52,6 +52,13 @@ export const runAll = internalAction({
       a.kind === b.kind ? 0 : a.kind === "catalogo" ? -1 : 1,
     );
 
+    // El índice de nombres se arma una vez y lo comparten todos los
+    // benchmarks: es el catálogo entero, y leerlo una vez por leaderboard era
+    // pagar cuatro veces por la misma tabla. Se construye tarde, al llegar al
+    // primer benchmark, porque para entonces los catálogos ya han escrito los
+    // modelos nuevos de hoy; ninguna fuente de benchmarks crea modelos.
+    let index: ReturnType<typeof buildIndex> | undefined;
+
     for (const source of enOrden) {
       if (soloFuente && source.id !== soloFuente) continue;
 
@@ -114,8 +121,9 @@ export const runAll = internalAction({
           const crudas = source.parse(body);
           if (crudas.length === 0) throw new Error("el parser no devolvió nada");
 
-          const catalogo = await ctx.runQuery(internal.ingest.store.catalogoParaMatching, {});
-          const index = buildIndex(catalogo);
+          index ??= buildIndex(
+            await ctx.runQuery(internal.ingest.store.catalogoParaMatching, {}),
+          );
 
           // modelHint se queda fuera: a partir de aquí manda el modelKey resuelto.
           type Resuelta = Omit<ParsedObservation, "modelHint"> & { modelKey: string };

@@ -98,5 +98,10 @@ export function buildCandidates(
     });
   }
 
+  // Ordenados por clave, igual que los que arma Convex: los empates de calidad
+  // se rompen por posición en el array, así que dos caminos con el mismo dato
+  // y distinto orden podrían dar distinta respuesta.
+  candidates.sort((a, b) => a.variantKey.localeCompare(b.variantKey));
+
   return { candidates, unresolved: [...unresolved.values()] };
 }

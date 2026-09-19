@@ -5,7 +5,7 @@ import { makeFunctionReference } from "convex/server";
 import { METRIC_CONFIG, metricasExcluidas, minimoDeBenchmarks } from "../convex/scoring/config";
 import type { Metric } from "../convex/sources/types";
 import { construirEscala, escalaPublica, scoreAll } from "../convex/scoring/compute";
-import { aplicarFiltrosDeCatalogo } from "../convex/scoring/filtros";
+import { aplicarFiltrosDeCatalogo, esFamilia } from "../convex/scoring/filtros";
 import { aTarjeta } from "../convex/scoring/presentar";
 import { elegibles, paretoFrontier, seleccionarRespuestas } from "../convex/scoring/tiers";
 import {
@@ -80,6 +80,51 @@ export type FiltrosDeRecomendacion = {
 };
 
 /**
+ * Una lista de la URL, en forma canónica: sin vacíos, sin repetidos y ordenada.
+ * Vacía se va a `undefined`, que es como viaja «sin filtro».
+ */
+function lista(valores: string[] | undefined, vale: (v: string) => boolean = () => true) {
+  const limpia = [...new Set((valores ?? []).filter((v) => v && vale(v)))].sort();
+  return limpia.length ? limpia : undefined;
+}
+
+/**
+ * Los filtros reducidos a su forma canónica, que es la clave con la que Convex
+ * guarda el resultado.
+ *
+ * No es cosmética. Convex cachea cada consulta por sus argumentos exactos, así
+ * que `{}`, `{sin: []}` y `{sin: [], minimo: 2}` —los tres «sin filtros», que
+ * es lo que pide la inmensa mayoría de las visitas— se cacheaban por separado
+ * y cada uno volvía a leer la base. Lo mismo un `ocultos` con los mismos
+ * modelos en otro orden, o una familia inventada que el servidor ignora.
+ *
+ * Todo lo que aquí se tira es algo que el servidor ya trataba como ausente: la
+ * respuesta no cambia, solo deja de calcularse dos veces.
+ */
+function normalizar(filtros: FiltrosDeRecomendacion): FiltrosDeRecomendacion {
+  const minimo = minimoDeBenchmarks(filtros.minimo);
+  const familia = filtros.familia?.trim();
+  const canonico: FiltrosDeRecomendacion = {
+    // Solo las fuentes que de verdad apagan una métrica: las demás no hacen nada.
+    sin: lista(filtros.sin, (f) => metricasExcluidas([f]).length > 0),
+    minimo: minimo === minimoDeBenchmarks(undefined) ? undefined : minimo,
+    familia: familia && esFamilia(familia) ? familia : undefined,
+    ocultos: lista(filtros.ocultos),
+    soloOpenWeights: filtros.soloOpenWeights || undefined,
+    presupuestoMax: Number.isFinite(filtros.presupuestoMax)
+      ? filtros.presupuestoMax
+      : undefined,
+  };
+  // Ordenadas: `{sin, minimo}` y `{minimo, sin}` son el mismo filtro y tienen
+  // que dar el mismo viaje.
+  return Object.fromEntries(
+    Object.entries(canonico)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b)),
+  );
+}
+
+/**
  * Las recomendaciones, una sola vez por petición y juego de filtros.
  *
  * La portada las pide desde dos sitios —el titular, para decir cuál es la
@@ -96,14 +141,7 @@ const recomendacionesPorClave = cache((clave: string): Promise<Recomendaciones> 
 export function obtenerRecomendaciones(
   filtros: FiltrosDeRecomendacion = {},
 ): Promise<Recomendaciones> {
-  // Las claves, ordenadas: `{sin, minimo}` y `{minimo, sin}` son el mismo
-  // filtro y tienen que dar el mismo viaje.
-  const ordenado = Object.fromEntries(
-    Object.entries(filtros)
-      .filter(([, v]) => v !== undefined)
-      .sort(([a], [b]) => a.localeCompare(b)),
-  );
-  return recomendacionesPorClave(JSON.stringify(ordenado));
+  return recomendacionesPorClave(JSON.stringify(normalizar(filtros)));
 }
 
 /**
@@ -157,15 +195,36 @@ export async function obtenerEstado(): Promise<EstadoDelPipeline | null> {
 }
 
 /**
+ * Las fuentes apagadas en la misma forma canónica que usa `normalizar`, y su
+ * ida y vuelta a cadena.
+ *
+ * Las tres consultas de abajo comparten esta clave por lo mismo que los
+ * filtros: `undefined` y `[]` son el mismo «no he apagado nada» y no pueden
+ * costar dos cálculos. Y como `cache` de React compara por identidad, un array
+ * recién construido en cada llamada nunca acertaría; una cadena sí.
+ */
+const claveDeFuentes = (sin?: string[]) =>
+  JSON.stringify(lista(sin, (f) => metricasExcluidas([f]).length > 0) ?? null);
+
+const fuentesDeLaClave = (clave: string) => (JSON.parse(clave) as string[] | null) ?? undefined;
+
+/**
  * Todo lo puntuado. Lo usa /metodologia para sacar sus ejemplos de
  * los datos de hoy en vez de dejarlos escritos en el HTML, donde envejecen sin
  * que nadie se entere.
  */
-export async function obtenerVariantes(sin?: string[]): Promise<Variante[]> {
+const variantesPorClave = cache((clave: string): Promise<Variante[]> => {
+  const sin = fuentesDeLaClave(clave);
   return pedirAConvex(consultas.listaVariantes, { sin }, variantesDeLaSemilla(sin));
+});
+
+export function obtenerVariantes(sin?: string[]): Promise<Variante[]> {
+  return variantesPorClave(claveDeFuentes(sin));
 }
 
-export async function obtenerMetodologia(): Promise<Metodologia> {
+// La piden la barra de filtros, el sello del titular y el pie de la tabla, o
+// sea tres veces por página. Es la misma respuesta las tres.
+export const obtenerMetodologia = cache(async function obtenerMetodologia(): Promise<Metodologia> {
   const m = await pedirAConvex(consultas.metodologia, {}, METODOLOGIA_SEMILLA);
   // El sesgo es copy de config.ts. Next lo tiene a mano, y así un arreglo de
   // una frase no espera a que Convex acepte un push.
@@ -176,35 +235,44 @@ export async function obtenerMetodologia(): Promise<Metodologia> {
       return local ? { ...metrica, sesgo: local.sesgo } : metrica;
     }),
   };
-}
+});
 
 /**
  * Los desniveles y el encogimiento de hoy. El respaldo no es una copia guardada
  * sino el mismo cálculo sobre la instantánea, igual que las recomendaciones:
  * una escala congelada explicaría unas notas que ya no son las que se ven.
  */
-export async function obtenerEscala(sin?: string[]): Promise<EscalaPublica> {
+const escalaPorClave = cache((clave: string): Promise<EscalaPublica> => {
   // Con `sin`, porque apagar una fuente mueve el centro y los extremos: una
   // ficha que puntúa con una fuente menos y explica la escala de otra estaría
   // enseñando una cuenta que no cierra.
-  const excluidas = metricasExcluidas(sin);
+  const sin = fuentesDeLaClave(clave);
   return pedirAConvex(
     consultas.escala,
     { sin },
-    escalaPublica(construirEscala(CANDIDATOS_SEMILLA, Date.now(), excluidas)),
+    escalaPublica(construirEscala(CANDIDATOS_SEMILLA, Date.now(), metricasExcluidas(sin))),
   );
+});
+
+export function obtenerEscala(sin?: string[]): Promise<EscalaPublica> {
+  return escalaPorClave(claveDeFuentes(sin));
 }
 
-export async function obtenerModelo(
-  modelKey: string,
-  sin?: string[],
-): Promise<FichaDeModelo | null> {
+// La ficha de un modelo se pide dos veces por visita: una para el <title> y
+// los metadatos, otra para la página. Es la misma consulta, y sin esto eran
+// dos cálculos del conjunto entero para pintar una sola pantalla.
+const modeloPorClave = cache((modelKey: string, clave: string): Promise<FichaDeModelo | null> => {
+  const sin = fuentesDeLaClave(clave);
   const semilla = MODELOS_SEMILLA[modelKey];
   const respaldo = semilla
     ? { ...semilla, variantes: variantesDeLaSemilla(sin).filter((v) => v.modelKey === modelKey) }
     : null;
-  if (!CONVEX_URL) return respaldo;
+  if (!CONVEX_URL) return Promise.resolve(respaldo);
   return pedirAConvex(consultas.modelo, { modelKey, sin }, respaldo);
+});
+
+export function obtenerModelo(modelKey: string, sin?: string[]): Promise<FichaDeModelo | null> {
+  return modeloPorClave(modelKey, claveDeFuentes(sin));
 }
 
 /** Todo lo puntuado sobre la instantánea, con las mismas funciones del servidor. */

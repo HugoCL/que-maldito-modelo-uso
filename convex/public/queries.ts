@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { query } from "../_generated/server";
-import { candidatosDesdeLaBase } from "../scoring/recompute";
+import { candidatosParaConsulta } from "../scoring/recompute";
 import { construirEscala, escalaPublica, scoreAll } from "../scoring/compute";
 import { elegibles, paretoFrontier, seleccionarRespuestas } from "../scoring/tiers";
 import { aTarjeta } from "../scoring/presentar";
@@ -57,7 +57,7 @@ const filtros = {
 export const recomendaciones = query({
   args: filtros,
   handler: async (ctx, args) => {
-    const candidatos = await candidatosDesdeLaBase(ctx);
+    const candidatos = await candidatosParaConsulta(ctx);
     const puntuados = scoreAll(candidatos, Date.now(), metricasExcluidas(args.sin));
     const filtrados = aplicarFiltrosDeCatalogo(puntuados, args);
     const minimo = minimoDeBenchmarks(args.minimo);
@@ -110,7 +110,7 @@ export const recomendaciones = query({
 export const listaVariantes = query({
   args: { sin: sinFuentes },
   handler: async (ctx, args) => {
-    const candidatos = await candidatosDesdeLaBase(ctx);
+    const candidatos = await candidatosParaConsulta(ctx);
     const puntuados = scoreAll(candidatos, Date.now(), metricasExcluidas(args.sin));
     const enFrontera = new Set(paretoFrontier(elegibles(puntuados)));
     return puntuados
@@ -129,7 +129,7 @@ export const modelo = query({
       .unique();
     if (!m) return null;
 
-    const candidatos = await candidatosDesdeLaBase(ctx);
+    const candidatos = await candidatosParaConsulta(ctx);
     const puntuados = scoreAll(candidatos, Date.now(), metricasExcluidas(sin));
     const variantes = puntuados
       .filter((s) => s.modelKey === modelKey)
@@ -166,7 +166,7 @@ export const escala = query({
   args: { sin: v.optional(v.array(v.string())) },
   handler: async (ctx, { sin }) =>
     escalaPublica(
-      construirEscala(await candidatosDesdeLaBase(ctx), Date.now(), metricasExcluidas(sin)),
+      construirEscala(await candidatosParaConsulta(ctx), Date.now(), metricasExcluidas(sin)),
     ),
 });
 
