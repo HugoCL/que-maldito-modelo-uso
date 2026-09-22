@@ -57,8 +57,8 @@ const filtros = {
 export const recomendaciones = query({
   args: filtros,
   handler: async (ctx, args) => {
-    const candidatos = await candidatosParaConsulta(ctx);
-    const puntuados = scoreAll(candidatos, Date.now(), metricasExcluidas(args.sin));
+    const { candidatos, ahora } = await candidatosParaConsulta(ctx);
+    const puntuados = scoreAll(candidatos, ahora, metricasExcluidas(args.sin));
     const filtrados = aplicarFiltrosDeCatalogo(puntuados, args);
     const minimo = minimoDeBenchmarks(args.minimo);
 
@@ -110,8 +110,8 @@ export const recomendaciones = query({
 export const listaVariantes = query({
   args: { sin: sinFuentes },
   handler: async (ctx, args) => {
-    const candidatos = await candidatosParaConsulta(ctx);
-    const puntuados = scoreAll(candidatos, Date.now(), metricasExcluidas(args.sin));
+    const { candidatos, ahora } = await candidatosParaConsulta(ctx);
+    const puntuados = scoreAll(candidatos, ahora, metricasExcluidas(args.sin));
     const enFrontera = new Set(paretoFrontier(elegibles(puntuados)));
     return puntuados
       .sort((a, b) => b.quality - a.quality)
@@ -129,8 +129,8 @@ export const modelo = query({
       .unique();
     if (!m) return null;
 
-    const candidatos = await candidatosParaConsulta(ctx);
-    const puntuados = scoreAll(candidatos, Date.now(), metricasExcluidas(sin));
+    const { candidatos, ahora } = await candidatosParaConsulta(ctx);
+    const puntuados = scoreAll(candidatos, ahora, metricasExcluidas(sin));
     const variantes = puntuados
       .filter((s) => s.modelKey === modelKey)
       .sort((a, b) => b.quality - a.quality);
@@ -164,10 +164,10 @@ export const modelo = query({
  */
 export const escala = query({
   args: { sin: v.optional(v.array(v.string())) },
-  handler: async (ctx, { sin }) =>
-    escalaPublica(
-      construirEscala(await candidatosParaConsulta(ctx), Date.now(), metricasExcluidas(sin)),
-    ),
+  handler: async (ctx, { sin }) => {
+    const { candidatos, ahora } = await candidatosParaConsulta(ctx);
+    return escalaPublica(construirEscala(candidatos, ahora, metricasExcluidas(sin)));
+  },
 });
 
 /**

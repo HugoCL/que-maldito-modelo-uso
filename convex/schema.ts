@@ -86,9 +86,13 @@ export default defineSchema({
   rawSnapshots: defineTable({
     sourceId: v.string(),
     contentHash: v.string(),
-    /** La copia cruda, cuando cabe en un documento. Ver `storageId`. */
+    /**
+     * La copia cruda dentro del documento. Ya no se escribe: queda para las
+     * filas de antes de mover todo a `storageId`, y se va con ellas cuando las
+     * pode `podarSnapshots`. Ver convex/ingest/snapshot.ts.
+     */
     body: v.optional(v.string()),
-    /** Donde vive la copia cuando pasa del límite de un documento. */
+    /** Donde vive la copia cruda. */
     storageId: v.optional(v.id("_storage")),
     byteLength: v.number(),
     fetchedAt: v.number(),

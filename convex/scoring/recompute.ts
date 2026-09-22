@@ -9,17 +9,32 @@ import { elegirTarjetas } from "./tiers";
 const POR_TROZO = 150;
 
 /**
- * Los candidatos que usa una consulta pública.
+ * Los candidatos que usa una consulta pública, y la hora contra la que se
+ * descuenta la antigüedad de sus mediciones.
  *
  * Salen del cache que deja cada run, que es una fila por cada 150. Si no hay
  * cache —base recién sembrada, o un despliegue anterior a esta tabla— se arman
  * en vivo: es más caro, pero una web en blanco esperando a que el cron pase a
  * las 6 UTC sería peor.
+ *
+ * La hora es la del run y no `Date.now()`, y es por I/O. Convex invalida a
+ * menudo el cache de una consulta que lee el reloj, para no servir un
+ * resultado viejo, así que cada visita volvía a leer la tabla entera aunque
+ * nada hubiera cambiado desde las 6 UTC. Con la hora del run el resultado solo
+ * depende de lo que hay en la base y se cachea hasta el run siguiente. El
+ * precio es que la antigüedad avanza a saltos de un día, y con vidas medias de
+ * meses eso no mueve ninguna nota. Además es la misma hora con la que
+ * `recalcular` comprueba el cálculo, así que lo que ve la web es lo que se
+ * comprobó.
  */
-export async function candidatosParaConsulta(ctx: QueryCtx): Promise<Candidate[]> {
+export async function candidatosParaConsulta(
+  ctx: QueryCtx,
+): Promise<{ candidatos: Candidate[]; ahora: number }> {
   const partes = await ctx.db.query("candidatos").withIndex("by_parte").collect();
-  if (partes.length === 0) return await candidatosDesdeLaBase(ctx);
-  return partes.flatMap((p) => p.trozo);
+  if (partes.length === 0) {
+    return { candidatos: await candidatosDesdeLaBase(ctx), ahora: Date.now() };
+  }
+  return { candidatos: partes.flatMap((p) => p.trozo), ahora: partes[0].generadoEn };
 }
 
 /**
