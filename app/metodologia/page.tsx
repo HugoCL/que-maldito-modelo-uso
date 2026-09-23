@@ -62,13 +62,51 @@ export default async function Metodologia() {
         </h1>
         <p className="text-pretty text-sm leading-[1.55] text-muted-foreground">
           Ninguna de las tres respuestas está elegida a mano. Salen de cruzar {metricas.length}{" "}
-          benchmarks con el costo real por tarea y aplicar tres reglas. Si alguna sorprende, lo que
-          hay que discutir es qué benchmarks entran.
+          benchmarks con el costo real por tarea y aplicar{" "}
+          <a href="#reglas" className="underline underline-offset-4 hover:text-foreground">
+            tres reglas
+          </a>
+          . Si alguna sorprende, lo que hay que discutir es qué benchmarks entran.
         </p>
+        {/* Un índice: la página es larga y casi nadie viene a leerla entera,
+            viene a buscar la respuesta a una duda concreta. Sale de la misma
+            condición que pinta cada sección, así que no enlaza a nada que no
+            esté. */}
+        <nav aria-labelledby="en-esta-pagina" className="mt-2 flex flex-col gap-2 rounded-[10px] border px-4 py-3">
+          <span id="en-esta-pagina" className="font-mono text-[11px] text-muted-foreground">
+            en esta página
+          </span>
+          <ol className="flex flex-col gap-1 text-[13px] leading-[1.45] text-foreground/80">
+            {[
+              effort && ["effort", "La unidad es el modelo por nivel de effort"],
+              ["calidad", "Calidad"],
+              ["desnivel", "Un 70 no vale lo mismo en todos los benchmarks"],
+              ["evidencia", "Cuántas mediciones sostienen la nota"],
+              banda && ["banda", "La banda, no el punto"],
+              ["costo", "Costo"],
+              ["indice", "El $ por tarea es un índice, no tu factura"],
+              ["reglas", "Las tres reglas"],
+              ["sin-dia-a-dia", "Cuándo no hay respuesta para el día a día"],
+              sueltas.length > 0 && ["una-fuente", "Lo que mide un solo benchmark"],
+              ["limites", "Lo que esto no es"],
+            ]
+              .filter((x): x is string[] => Array.isArray(x))
+              .map(([id, titulo]) => (
+                <li key={id}>
+                  <a
+                    href={`#${id}`}
+                    className="underline decoration-foreground/25 underline-offset-4 hover:text-foreground hover:decoration-foreground"
+                  >
+                    {titulo}
+                  </a>
+                </li>
+              ))}
+          </ol>
+        </nav>
       </header>
 
       {effort ? (
-        <Seccion titulo="La unidad es el modelo por nivel de effort">
+        <Seccion titulo="La unidad es el modelo por nivel de effort" id="effort">
           <p>
             No recomendamos un modelo, recomendamos un modelo a un nivel de effort. Ahora mismo el
             caso más caro de ignorarlo es este: en {effort.metrica.etiqueta},{" "}
@@ -84,7 +122,7 @@ export default async function Metodologia() {
         </Seccion>
       ) : null}
 
-      <Seccion titulo="Calidad">
+      <Seccion titulo="Calidad" id="calidad">
         <p>
           Cada benchmark se normaliza contra el mejor y el peor resultado del conjunto completo, no
           del subconjunto que dejen tus filtros, para que un mismo modelo no cambie de número al
@@ -113,10 +151,10 @@ export default async function Metodologia() {
           <>
             <p>
               Una fuente puede medir bien y aun así no medir a todos. Cuando eso pasa se dice aquí
-              y se puede apagar desde la página principal, que recalcula las tres respuestas sin
-              ella en vez de tacharlas de una lista ya hecha. No es elegir qué benchmark te
-              conviene: es poder ver cuánto de la respuesta lo estaba sosteniendo una fuente con un
-              agujero conocido.
+              y se puede apagar desde la página principal, en «{es.filtros.masAjustes}», que
+              recalcula las tres respuestas sin ella en vez de tacharlas de una lista ya hecha. No
+              es elegir qué benchmark te conviene: es poder ver cuánto de la respuesta lo estaba
+              sosteniendo una fuente con un agujero conocido.
             </p>
             {conSesgo.map((m) => (
               <p key={m.metric} className="text-[13px] leading-[1.55] text-muted-foreground">
@@ -137,7 +175,7 @@ export default async function Metodologia() {
           .
         </p>
         <p>
-          Ese mínimo se puede bajar desde la página principal, en «{es.filtros.minimo}». Bajarlo a{" "}
+          Ese mínimo se puede bajar desde la página principal, en «{es.filtros.masAjustes}». Bajarlo a{" "}
           <Cifra>{umbrales.benchmarksMinimosSuelo}</Cifra> no cambia las notas: cambia quién puede
           ser respuesta. Entran los medidos una sola vez, marcados como confianza baja. Se queda en{" "}
           <Cifra>{umbrales.benchmarksMinimos}</Cifra> porque si no, los baratos de un solo benchmark
@@ -232,7 +270,7 @@ export default async function Metodologia() {
       </Seccion>
 
       {banda ? (
-        <Seccion titulo="La banda, no el punto">
+        <Seccion titulo="La banda, no el punto" id="banda">
           <p>
             Los benchmarks que publican intervalos de confianza los publican anchos. La banda más
             ancha que hay hoy es la de <strong>{banda.modelName}</strong> en{" "}
@@ -322,7 +360,7 @@ export default async function Metodologia() {
         </p>
       </Seccion>
 
-      <Seccion titulo="Las tres reglas">
+      <Seccion titulo="Las tres reglas" id="reglas">
         <p>
           Primero se descarta lo dominado: si otro modelo es mejor <em>y</em> más barato, ninguna
           respuesta puede ser este. Lo que queda es el frontier, donde cada paso es un intercambio
@@ -441,7 +479,7 @@ export default async function Metodologia() {
         </Seccion>
       ) : null}
 
-      <Seccion titulo="Lo que esto no es">
+      <Seccion titulo="Lo que esto no es" id="limites">
         <p>
           No es una medición propia: no corremos ningún benchmark, cruzamos los de otros. Si una
           fuente se equivoca, nosotros nos equivocamos con ella. Y un modelo recién salido tarda en

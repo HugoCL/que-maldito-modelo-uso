@@ -162,39 +162,39 @@ async function Respuestas({ params }: { params: ParamsPortada }) {
     );
   }
 
-  // El sello nombra lo que produce los dos números de arriba: los benchmarks
-  // que puntúan la calidad y el catálogo del que salen precios y fechas. La
-  // atribución completa, con enlaces (que es lo que piden las licencias), va
-  // en el pie de página y sale de esta misma lista.
-  // Sin las apagadas: este sello nombra lo que produjo los dos números de
-  // arriba, así que no puede seguir firmando con una fuente que no ha contado.
-  const activas = metodologia.fuentes.filter((f) => f.activa && !sin.includes(f.id));
-  const fuentes = [
-    ...activas.filter((f) => f.tipo === "benchmark"),
-    ...activas.filter((f) => f.tipo === "catalogo").slice(0, 1),
-  ].map((f) => f.nombre);
+  const benchmarks = metodologia.metricas.filter((m) => !sin.includes(m.fuente)).length;
 
   return (
     <>
       <div className="flex flex-col overflow-hidden rounded-[10px] border">
-        {tarjetas.map((t) => (
-          <FilaRecomendacion key={t.tier} tarjeta={t} sin={params.sin} />
-        ))}
-
-        <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 border-t bg-muted/40 px-4 py-[11px] font-mono text-[11.5px] text-muted-foreground sm:grid sm:grid-cols-[150px_minmax(0,1fr)_90px_96px] sm:gap-6 sm:px-[22px]">
-          <span className="hidden sm:block" />
-          {/* La frase entera y no solo la ayuda al pasar por encima: en una
-              pantalla táctil esa caja no aparece nunca, y decir que el precio es
-              un índice no puede depender de tener ratón. */}
-          <span>{es.portada.pieDeTabla(metodologia.metricas.filter((m) => !sin.includes(m.fuente)).length)}</span>
-          <span className="hidden sm:block sm:text-right">{es.portada.calidad}</span>
-          <span className="opcion encima hidden sm:block sm:justify-end sm:text-right">
+        {/* Las cabeceras arriba, que es donde se buscan: antes iban en el pie
+            y los números se leían antes de saber qué eran. En estrecho no hay
+            columnas y cada cifra lleva su unidad pegada. */}
+        <div className="hidden bg-muted/40 px-[22px] py-2.5 font-mono text-[11.5px] text-muted-foreground sm:grid sm:grid-cols-[150px_minmax(0,1fr)_90px_96px] sm:gap-6">
+          <span>{es.portada.respuesta}</span>
+          <span>{es.portada.modelo}</span>
+          <span className="text-right">{es.portada.calidad}</span>
+          <span className="opcion justify-end">
             <Link href="/metodologia#indice" className="underline decoration-dotted underline-offset-4">
-              {es.portada.porTarea}
+              {es.portada.costoPorTarea}
             </Link>
             <span className="ayuda">{es.indice.ayuda}</span>
           </span>
         </div>
+
+        {tarjetas.map((t) => (
+          <FilaRecomendacion key={t.tier} tarjeta={t} sin={params.sin} />
+        ))}
+
+        {/* La frase entera y no solo la ayuda al pasar por encima: en una
+            pantalla táctil esa caja no aparece nunca, y decir que el precio es
+            un índice no puede depender de tener ratón. */}
+        <p className="border-t bg-muted/40 px-4 py-[11px] font-mono text-[11.5px] leading-[1.6] text-muted-foreground sm:px-[22px]">
+          {es.portada.pieDeTabla(benchmarks)}{" "}
+          <Link href="/metodologia" className="underline underline-offset-4 hover:text-foreground">
+            {es.portada.comoSeCalcula}
+          </Link>
+        </p>
       </div>
 
       {/* Por qué falta la del día a día, dicho con su motivo y no con un «no hay
@@ -226,13 +226,6 @@ async function Respuestas({ params }: { params: ParamsPortada }) {
           </Link>
         </p>
       ) : null}
-
-      <p className="font-mono text-[11.5px] leading-[1.6] text-muted-foreground">
-        {fuentes.join(" · ")} ·{" "}
-        {usandoSemilla
-          ? `instantánea del ${fechaDeLaSemilla}`
-          : (hace(datos.actualizado) ?? es.estado.sinCorridas)}
-      </p>
     </>
   );
 }
