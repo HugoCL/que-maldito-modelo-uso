@@ -14,7 +14,9 @@ export const es = {
     nombreEntero: "Qué maldito modelo uso",
     palabrota: "maldito",
     nombreCorto: "qmmu",
-    lema: "¿Cansado de preguntar o buscar cuál es el mejor modelo? Tres respuestas.",
+    // Dice para qué es (programar) y que se renueva solo, que es lo que
+    // distingue esto de una tabla cualquiera.
+    lema: "¿Cansado de buscar cuál es el mejor modelo para programar? Tres respuestas, al día.",
   },
   nav: {
     inicio: "Inicio",
@@ -95,6 +97,10 @@ export const es = {
     medidoPor: "Medido por",
     disponibleEn: "Disponible en",
     pesosAbiertos: "Open Weight",
+  },
+  ficha: {
+    // Al lado del effort que hoy gana una de las tres respuestas.
+    ganaA: (tier: { orden: string; etiqueta: string }) => `respuesta ${tier.orden} · ${tier.etiqueta}`,
   },
   // El desglose de la nota, en la ficha del modelo. No es decoración: una nota
   // de 0 a 100 que nadie puede rehacer a mano es un número pedido de fe, y
@@ -177,7 +183,7 @@ export const es = {
     presupuesto: "Máximo por tarea",
     // Cada grupo es una pregunta, no un verbo suelto: "exige" y "puntúa con"
     // se leían como una sola frase y no se entendía qué hacía cada pastilla.
-    maxPorTarea: "tope por tarea",
+    maxPorTarea: "cuánto gastar por tarea",
     hasta: (valor: string) => `hasta $${valor}`,
     sinTechoCorto: "sin tope",
     // El interruptor de una fuente con sesgo de cobertura. El nombre del
@@ -190,7 +196,7 @@ export const es = {
     // "N benchmarks": eso último se lee como cuántos se usan para puntuar,
     // y aquí se elige el umbral para poder ganar una tarjeta. La cifra sale
     // del umbral: si mañana la metodología pide tres, la barra lo dice sola.
-    minimo: "para ser respuesta",
+    minimo: "evidencia mínima para ser respuesta",
     minimoPastilla: (n: number) =>
       n === 1 ? "al menos 1 benchmark" : `al menos ${n} benchmarks`,
     minimoUnoAyuda:
@@ -203,7 +209,10 @@ export const es = {
     conUnBenchmark: "basta un benchmark para poder ser respuesta",
     sinTecho: "sin techo",
     soloOpenWeight: "Solo Open Weight",
-    atajos: "atajos",
+    atajos: "qué modelos",
+    // Lo que casi nadie toca: cuánta evidencia se exige y qué fuentes cuentan.
+    masAjustes: "más ajustes",
+    ajustesTocados: (n: number) => (n === 1 ? "1 cambiado" : `${n} cambiados`),
     noPuedoUsar: "filtrar modelos",
     noPuedoUsarAyuda:
       "Desmarca los que no puedes usar, o los que no quieres, para sacarlos de las tres respuestas y del gráfico.",
@@ -247,7 +256,12 @@ export const es = {
     sinCorridas: "sin runs todavía",
   },
   portada: {
+    // Cabeceras de la tabla de respuestas.
+    respuesta: "respuesta",
+    modelo: "modelo",
     calidad: "calidad",
+    costoPorTarea: "$/tarea",
+    comoSeCalcula: "cómo se calcula",
     porTarea: "/tarea",
     deCien: "/100",
     // La línea de arriba del titular. Dice de dónde salen los números y de
@@ -257,9 +271,11 @@ export const es = {
     variantes: (n: number) => (n === 1 ? "1 variante puntuada" : `${n} variantes puntuadas`),
     pieDeTabla: (benchmarks: number) =>
       `calidad de ${benchmarks} benchmarks nivelados · el $/tarea es un índice, no tu factura`,
+    // Qué eje es cuál, con flechas: el gráfico no tiene títulos de eje y
+    // «calidad × costo» no decía cuál iba de lado y cuál de pie.
     ejes: (elegibles: number, enFrontera: number) =>
-      `calidad × costo · ${elegibles} variantes · ${enFrontera} en el frontier`,
-    ejesCorto: (elegibles: number) => `calidad × costo · ${elegibles} variantes`,
+      `calidad ↑ · $/tarea → · ${elegibles} variantes · ${enFrontera} en el frontier, unidas por la línea`,
+    ejesCorto: (elegibles: number) => `calidad ↑ · $/tarea → · ${elegibles} variantes`,
     unaFuente: (n: number) =>
       n === 1
         ? "Otra variante está medida por un solo benchmark y no compite por las tres respuestas"
@@ -293,7 +309,7 @@ export const es = {
   vacio: {
     titulo: "Ningún modelo pasa esos filtros",
     descripcion:
-      "Con esas restricciones no queda nada medido por suficientes benchmarks. Prueba a subir el techo de costo o a quitar el atajo.",
+      "Con esas restricciones no queda nada medido por suficientes benchmarks. Prueba a gastar un poco más por tarea o a mirar más modelos.",
   },
   generico: {
     porTarea: "/tarea",

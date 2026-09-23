@@ -157,6 +157,9 @@ export function FilaRecomendacion({ tarjeta, sin }: { tarjeta: Tarjeta; sin?: st
         </span>
         <span className={cn("sm:text-right", destacada ? "text-[19px]" : "text-[17px]")}>
           {ganador.cost !== undefined ? `$${ganador.cost.toFixed(2)}` : "—"}
+          {/* En ancho lo dice la cabecera de la columna; en estrecho no hay
+              columnas y un «$2.13» suelto no dice de qué. */}
+          <span className="text-xs text-muted-foreground sm:hidden">{es.portada.porTarea}</span>
         </span>
       </div>
     </div>
