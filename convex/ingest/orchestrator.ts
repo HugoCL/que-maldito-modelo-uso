@@ -42,9 +42,15 @@ export const runAll = internalAction({
     soloFuente: v.optional(v.string()),
     /** Rehace el parseo aunque el contenido no haya cambiado. */
     forzar: v.optional(v.boolean()),
+    /**
+     * La fila de la bitácora, cuando ya la abrió quien encargó el run. Así lo
+     * hace `ingest/refresco:pedir`, para que dos peticiones seguidas no puedan
+     * colar dos runs a la vez.
+     */
+    runId: v.optional(v.id("ingestRuns")),
   },
-  handler: async (ctx, { trigger = "manual", soloFuente, forzar = false }) => {
-    const runId = await ctx.runMutation(internal.ingest.runs.iniciar, { trigger });
+  handler: async (ctx, { trigger = "manual", soloFuente, forzar = false, runId: abierta }) => {
+    const runId = abierta ?? (await ctx.runMutation(internal.ingest.runs.iniciar, { trigger }));
     const resultados: Resultado[] = [];
 
     // Los catálogos primero: sin ellos no hay contra qué resolver nombres.

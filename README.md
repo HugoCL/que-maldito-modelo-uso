@@ -70,6 +70,33 @@ el cron:
 npx convex run --prod 'ingest/orchestrator:runAll' '{"trigger":"manual"}'
 ```
 
+### Refrescar sin esperar al cron
+
+Hay una ruta que no enlaza ninguna página, `/api/refrescar`, que relanza el
+pipeline entero (catálogos y benchmarks) sin pasar por la terminal. La guarda un
+token que vive en Convex, así que primero hay que ponerlo:
+
+```bash
+npx convex env set --prod REFRESCO_TOKEN "$(openssl rand -hex 32)"
+```
+
+Después, cualquiera de las dos:
+
+```bash
+curl -X POST -H "Authorization: Bearer $REFRESCO_TOKEN" https://qmmu.hugocastro.dev/api/refrescar
+```
+
+```
+https://qmmu.hugocastro.dev/api/refrescar?token=...
+```
+
+La segunda se abre desde el navegador, a cambio de que el token quede en el
+historial. Con `forzar=1` rehace el parseo aunque ninguna fuente haya cambiado,
+que es lo que hace falta después de arreglar un parser. La ruta no espera al
+run: lo encarga, contesta `202` y el avance se ve en [/estado](app/estado/page.tsx).
+Si ya hay uno en marcha contesta `409` y no encarga otro. Sin `REFRESCO_TOKEN`,
+o con uno de menos de 24 caracteres, la ruta existe pero no hace nada.
+
 Ninguna página se prerenderiza ([`app/layout.tsx`](app/layout.tsx) fuerza el
 renderizado dinámico). Todo lo que se ve sale de una consulta a Convex que no se
 cachea, así que prerenderizar cualquier página la dejaría congelada con los
