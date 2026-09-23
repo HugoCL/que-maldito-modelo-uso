@@ -57,6 +57,13 @@ export const candidatoValidator = v.object({
       ciLo: v.optional(v.number()),
       ciHi: v.optional(v.number()),
       measuredAt: v.optional(v.string()),
+      /**
+       * Lo publicó el laboratorio el día del lanzamiento, no el benchmark.
+       * Ver la tabla `preliminares`.
+       */
+      preliminar: v.optional(v.boolean()),
+      /** Dónde lo publicó, cuando es preliminar. */
+      fuenteUrl: v.optional(v.string()),
     }),
   ),
   costSamples: v.array(v.object({ sourceId: v.string(), costPerTask: v.number() })),
@@ -210,6 +217,38 @@ export default defineSchema({
     lastSeenAt: v.number(),
     timesSeen: v.number(),
   }).index("by_source_key", ["sourceId", "sourceKey"]),
+
+  /**
+   * Resultados que publica el laboratorio al lanzar un modelo, antes de que el
+   * benchmark lo mida con su propio harness. Se cargan a mano desde
+   * /admin/preliminares.
+   *
+   * Van aparte de `observations` porque no son lo mismo: una observación la
+   * midió la fuente y se reemplaza entera en cada run; esto lo cuenta el
+   * fabricante y no lo toca ningún run. Se juntan al armar los candidatos, y
+   * ahí el valor oficial sobrescribe al preliminar de la misma métrica: el día
+   * que el benchmark publica, el preliminar deja de contar solo, sin borrarlo.
+   * Ver scoring/preliminares.ts.
+   *
+   * Cuelga del `modelKey` y no de una variante a propósito: así se puede
+   * cargar el día del lanzamiento aunque el catálogo todavía no tenga el
+   * modelo, y empieza a contar en cuanto lo tenga.
+   */
+  preliminares: defineTable({
+    modelKey: v.string(),
+    effort: effortValidator,
+    metric: metricValidator,
+    /** 0..1, como las observaciones. */
+    value: v.number(),
+    /** El anuncio, el paper o la tabla de donde sale el número. */
+    fuenteUrl: v.optional(v.string()),
+    /** Fecha del dato, AAAA-MM-DD. Entra en el descuento por antigüedad. */
+    measuredAt: v.optional(v.string()),
+    creadoEn: v.number(),
+    actualizadoEn: v.number(),
+  })
+    .index("by_modelKey", ["modelKey"])
+    .index("by_clave", ["modelKey", "effort", "metric"]),
 
   /**
    * El conjunto de candidatos ya armado, en trozos.

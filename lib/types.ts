@@ -25,6 +25,13 @@ export type MetricaDeVariante = {
   /** Peor y mejor resultado medidos en este benchmark, en porcentaje. */
   minimo: number;
   maximo: number;
+  /**
+   * Lo publicó el laboratorio, no el benchmark: vale hasta que el benchmark
+   * publique su propio resultado, que lo sobrescribe.
+   */
+  preliminar?: boolean;
+  /** Dónde lo publicó el laboratorio. */
+  fuenteUrl?: string;
 };
 
 export type Variante = {
@@ -50,6 +57,8 @@ export type Variante = {
   coverage: number;
   /** Fuentes distintas que midieron esta variante. */
   benchmarks: number;
+  /** Alguno de sus benchmarks es un preliminar del laboratorio. */
+  preliminar?: boolean;
   confidence: Confianza;
   cost?: number;
   costMeasured: boolean;

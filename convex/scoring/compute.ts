@@ -15,6 +15,9 @@ export type MetricSample = {
   ciLo?: number;
   ciHi?: number;
   measuredAt?: string;
+  /** Publicado por el laboratorio, todavía sin medir por el benchmark. */
+  preliminar?: boolean;
+  fuenteUrl?: string;
 };
 
 export type CostSample = { sourceId: string; costPerTask: number };
@@ -55,6 +58,8 @@ export type MetricBreakdown = {
       se puede comprobar: es un número sin unidad. */
   min: number;
   max: number;
+  preliminar?: boolean;
+  fuenteUrl?: string;
 };
 
 export type Scored = Candidate & {
@@ -77,6 +82,8 @@ export type Scored = Candidate & {
   coverage: number;
   /** Fuentes distintas que midieron esta variante. */
   benchmarks: number;
+  /** Alguno de los benchmarks que cuentan es un preliminar del laboratorio. */
+  preliminar: boolean;
   confidence: "alta" | "media" | "baja";
   cost?: number;
   costMeasured: boolean;
@@ -425,6 +432,7 @@ function nivelar(
       weight,
       min: b?.min ?? m.value,
       max: b?.max ?? m.value,
+      ...(m.preliminar ? { preliminar: true, fuenteUrl: m.fuenteUrl } : {}),
     });
   }
 
@@ -456,10 +464,20 @@ function nivelar(
  * modelo, solo dejar de promediarla con la otra.
  */
 export function construirEscala(
-  candidates: Candidate[],
+  todos: Candidate[],
   now: number = Date.now(),
   sinMetricas: Metric[] = [],
 ): Escala {
+  // Los preliminares se puntúan contra la escala pero no la mueven. Un número
+  // que publica el fabricante con su propio harness no puede correr los
+  // extremos, los desniveles ni el centro con los que se puntúa a todos los
+  // demás: si no, cargar una cifra optimista a mano le cambiaría la nota a
+  // modelos que no tienen nada que ver.
+  const candidates = todos.map((c) =>
+    c.metrics.some((m) => m.preliminar)
+      ? { ...c, metrics: c.metrics.filter((m) => !m.preliminar) }
+      : c,
+  );
   const bounds = computeBounds(candidates);
 
   const claves = METRICAS_ACTIVAS() as string[];
@@ -576,6 +594,7 @@ export function scoreCandidate(
     qualityHi: nivelada ? aNota(nivelada.muHi, nivelada.evidencia, escala) : 0,
     coverage: nivelada?.coverage ?? 0,
     benchmarks,
+    preliminar: breakdown.some((m) => m.preliminar),
     confidence:
       benchmarks >= cuentan
         ? "alta"

@@ -77,6 +77,11 @@ export const es = {
     confianzaBaja: "confianza baja",
     confianzaBajaNota:
       "Un solo benchmark ha medido esta variante: su nota es esa única medición, sin promedio que la contraste.",
+    // La marca de una nota que se apoya en algún resultado que publicó el
+    // laboratorio y que el benchmark todavía no ha medido.
+    preliminar: "preliminar",
+    preliminarNota:
+      "Parte de esta nota sale de lo que publicó el laboratorio al lanzar el modelo, sin medir todavía por el benchmark. Cuando el benchmark publique su resultado, reemplaza a este.",
     // La marca de una tarjeta que recomienda el mismo modelo que otra. Dice a
     // cuál repite, porque «también es el barato» y «también es el mejor» no
     // significan lo mismo ni de lejos.
