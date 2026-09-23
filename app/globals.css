@@ -306,24 +306,21 @@
 }
 
 /**
- * La explicación de una opción, al pasar por encima. Cuelga del grupo o de la
- * pastilla. Ver components/barra-de-filtros.tsx.
+ * Una explicación corta, al pasar por encima. Hoy solo la usa el «/tarea» de la
+ * cabecera de la tabla de la portada; las de los filtros van escritas a la
+ * vista dentro de «más ajustes».
  *
  * Escondida está en `display: none` y no solo transparente: una caja de 280px
- * colgando de una pastilla ensancha la página aunque no se vea.
+ * colgando de una etiqueta ensancha la página aunque no se vea.
  *
  * Y solo aparece donde hay puntero y sitio. En una pantalla táctil no hay hover
  * que la enseñe, y por debajo de 560px una caja de este ancho se saldría de la
- * ventana. Para esos casos está la línea de debajo de la barra, que dice con
- * qué se está puntuando, y /metodologia, que explica el porqué entero.
+ * ventana. Para esos casos está la frase del pie de la tabla, que dice lo
+ * mismo, y /metodologia, que explica el porqué entero.
  */
 .opcion {
   position: relative;
   display: inline-flex;
-}
-
-.grupo-con-ayuda {
-  position: relative;
 }
 
 .ayuda {
@@ -347,26 +344,14 @@
   pointer-events: none;
 }
 
-.opcion:last-child .ayuda,
-[role="group"]:last-child .ayuda {
+.opcion:last-child .ayuda {
   right: 0;
   left: auto;
 }
 
-/* El /tarea del pie de la tabla: si cuelga hacia abajo, overflow-hidden de
-   las esquinas redondas lo corta. Va encima, que es el único sitio con sitio. */
-.opcion.encima .ayuda {
-  top: auto;
-  bottom: 100%;
-  margin-top: 0;
-  margin-bottom: 7px;
-}
-
 @media (hover: hover) and (min-width: 560px) {
   .opcion:hover .ayuda,
-  .opcion:focus-within .ayuda,
-  .grupo-con-ayuda:hover > .ayuda,
-  .grupo-con-ayuda:focus-within > .ayuda {
+  .opcion:focus-within .ayuda {
     display: block;
   }
 }

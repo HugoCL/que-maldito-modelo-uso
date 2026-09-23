@@ -26,6 +26,13 @@ const COLUMNAS = [
   [es.desglose.nivelado, es.desglose.columnas.nivelado],
 ] as const;
 
+/** El mismo color de cada respuesta que en la portada. Ver fila-recomendacion.tsx. */
+const BARRA: Record<Tier, string> = {
+  barato: "border-l-tier-barato",
+  dia_a_dia: "border-l-tier-dia",
+  bueno: "border-l-tier-bueno",
+};
+
 /** Las cinco columnas del desglose: el benchmark y sus cuatro pasos. */
 const CUADRICULA = "grid grid-cols-[minmax(0,1fr)_52px_46px_52px_52px] items-baseline gap-x-2";
 
@@ -119,10 +126,18 @@ export default async function FichaModelo({
                 key={v.variantKey}
                 className={cn(
                   "grid grid-cols-[1fr_70px_78px] gap-3 border-t border-border px-4 py-3 font-mono text-[13.5px] leading-[1.3] tabular-nums",
-                  ganadores.has(v.variantKey) && "border-l-[3px] border-l-primary",
+                  ganadores.has(v.variantKey) && ["border-l-[3px]", BARRA[ganadores.get(v.variantKey)!]],
                 )}
               >
-                <span>{v.effort === "default" ? es.tarjeta.sinEffort : v.effort}</span>
+                <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+                  {v.effort === "default" ? es.tarjeta.sinEffort : v.effort}
+                  {/* La barra sola no decía nada: ahora dice qué respuesta es. */}
+                  {ganadores.has(v.variantKey) ? (
+                    <span className="text-[11px] text-muted-foreground">
+                      {es.ficha.ganaA(es.tiers[ganadores.get(v.variantKey)!])}
+                    </span>
+                  ) : null}
+                </span>
                 <span className="text-right">
                   <CuentaDeLaNota variante={v} escala={deLaEscala}>
                     {v.quality.toFixed(1)}
@@ -158,109 +173,117 @@ export default async function FichaModelo({
       </dl>
 
       {conDesglose.length > 0 ? (
-        <div className="flex flex-col gap-2.5 border-t pt-5">
-          <span className="text-[13px] font-medium">{es.desglose.titulo}</span>
+        // Plegado: es la cuenta para quien quiere rehacerla a mano, y abierto
+        // ocupaba dos tercios de la ficha. El globo de cada nota de arriba
+        // sigue enseñando la operación sin abrir nada.
+        <details className="group border-t pt-5">
+          <summary className="w-fit cursor-pointer list-none text-[13px] font-medium [&::-webkit-details-marker]:hidden">
+            <span className="mr-1.5 inline-block text-muted-foreground transition-transform group-open:rotate-90">›</span>
+            {es.desglose.titulo}
+          </summary>
+          <div className="mt-2.5 flex flex-col gap-2.5">
 
-          {/* Una por effort, en el mismo orden que la tabla de arriba: la
-              pregunta de esta página es qué compra subir de nivel, y explicar
-              solo una de las cinco notas deja las otras cuatro en un número
-              que hay que creerse.
+            {/* Una por effort, en el mismo orden que la tabla de arriba: la
+                pregunta de esta página es qué compra subir de nivel, y explicar
+                solo una de las cinco notas deja las otras cuatro en un número
+                que hay que creerse.
 
-              Cuatro columnas por benchmark, que son los cuatro pasos: lo
-              que publica, ese resultado en la escala de 0 a 100, el ajuste que
-              le toca por el desnivel de su fuente y lo que queda, que es lo
-              único que se promedia. El ajuste se enseña con su signo y ya
-              cambiado de sentido: es el número que hay que sumarle a la columna
-              de al lado, porque el sentido de esta tabla es poder rehacerla a
-              mano. Esconderlo dejaría la media sin cuadrar. El peso no va en la
-              fila porque todos valen lo mismo.
+                Cuatro columnas por benchmark, que son los cuatro pasos: lo
+                que publica, ese resultado en la escala de 0 a 100, el ajuste que
+                le toca por el desnivel de su fuente y lo que queda, que es lo
+                único que se promedia. El ajuste se enseña con su signo y ya
+                cambiado de sentido: es el número que hay que sumarle a la columna
+                de al lado, porque el sentido de esta tabla es poder rehacerla a
+                mano. Esconderlo dejaría la media sin cuadrar. El peso no va en la
+                fila porque todos valen lo mismo.
 
-              En una columna estrecha la tabla se desplaza en horizontal en vez
-              de apretar cinco columnas hasta que no se lea ninguna. */}
-          <div className="overflow-x-auto rounded-[10px] border">
-            <div className="flex min-w-[420px] flex-col font-mono text-[12px]">
-              <div className={cn(CUADRICULA, "bg-muted/40 px-3.5 py-2 text-[11px] text-muted-foreground")}>
-                <span />
-                <span className="text-right">{es.desglose.publica}</span>
-                <span className="text-right">{es.desglose.enLaEscala}</span>
-                <span className="text-right">{es.desglose.ajuste}</span>
-                <span className="text-right">{es.desglose.nivelado}</span>
-              </div>
-              {conDesglose.map((v) => (
-                <div key={v.variantKey} className="border-t border-border">
-                  <div className={cn(CUADRICULA, "bg-muted/40 px-3.5 py-2")}>
-                    <span className="min-w-0 truncate">
-                      {v.effort === "default" ? es.tarjeta.sinEffort : v.effort}
-                    </span>
-                    <span className="col-span-4 text-right tabular-nums">
-                      <span className="text-muted-foreground">{es.desglose.calidad} </span>
-                      <CuentaDeLaNota variante={v} escala={deLaEscala} className="font-medium">
-                        {v.quality.toFixed(1)}
-                      </CuentaDeLaNota>
-                    </span>
-                  </div>
-                  {v.metricas.map((met) => (
-                    <div
-                      key={met.metric}
-                      className={cn(CUADRICULA, "px-3.5 py-[7px] text-muted-foreground")}
-                    >
-                      <span className="min-w-0 truncate">{met.etiqueta}</span>
-                      <span className="text-right tabular-nums">{met.valor.toFixed(1)}%</span>
-                      {/* Con un decimal y no redondeado a entero: la gracia de
-                          esto es poder rehacer la media a mano, y 100 + 99 da
-                          99.5 cuando la nota dice 99.7. */}
-                      <span className="text-right tabular-nums">{met.normalizado.toFixed(1)}</span>
-                      <span className="text-right tabular-nums">
-                        {met.desnivel === 0 ? "—" : conSigno(-met.desnivel)}
+                En una columna estrecha la tabla se desplaza en horizontal en vez
+                de apretar cinco columnas hasta que no se lea ninguna. */}
+            <div className="overflow-x-auto rounded-[10px] border">
+              <div className="flex min-w-[420px] flex-col font-mono text-[12px]">
+                <div className={cn(CUADRICULA, "bg-muted/40 px-3.5 py-2 text-[11px] text-muted-foreground")}>
+                  <span />
+                  <span className="text-right">{es.desglose.publica}</span>
+                  <span className="text-right">{es.desglose.enLaEscala}</span>
+                  <span className="text-right">{es.desglose.ajuste}</span>
+                  <span className="text-right">{es.desglose.nivelado}</span>
+                </div>
+                {conDesglose.map((v) => (
+                  <div key={v.variantKey} className="border-t border-border">
+                    <div className={cn(CUADRICULA, "bg-muted/40 px-3.5 py-2")}>
+                      <span className="min-w-0 truncate">
+                        {v.effort === "default" ? es.tarjeta.sinEffort : v.effort}
                       </span>
-                      <span className="text-right tabular-nums text-foreground/75">
-                        {(met.normalizado - met.desnivel).toFixed(1)}
+                      <span className="col-span-4 text-right tabular-nums">
+                        <span className="text-muted-foreground">{es.desglose.calidad} </span>
+                        <CuentaDeLaNota variante={v} escala={deLaEscala} className="font-medium">
+                          {v.quality.toFixed(1)}
+                        </CuentaDeLaNota>
                       </span>
                     </div>
-                  ))}
-                  {/* Aire debajo del último benchmark: aquí acababan las dos
-                      filas de la media, y sin nada el grupo quedaba pegado al
-                      siguiente. */}
-                  <div className="pb-1" />
+                    {v.metricas.map((met) => (
+                      <div
+                        key={met.metric}
+                        className={cn(CUADRICULA, "px-3.5 py-[7px] text-muted-foreground")}
+                      >
+                        <span className="min-w-0 truncate">{met.etiqueta}</span>
+                        <span className="text-right tabular-nums">{met.valor.toFixed(1)}%</span>
+                        {/* Con un decimal y no redondeado a entero: la gracia de
+                            esto es poder rehacer la media a mano, y 100 + 99 da
+                            99.5 cuando la nota dice 99.7. */}
+                        <span className="text-right tabular-nums">{met.normalizado.toFixed(1)}</span>
+                        <span className="text-right tabular-nums">
+                          {met.desnivel === 0 ? "—" : conSigno(-met.desnivel)}
+                        </span>
+                        <span className="text-right tabular-nums text-foreground/75">
+                          {(met.normalizado - met.desnivel).toFixed(1)}
+                        </span>
+                      </div>
+                    ))}
+                    {/* Aire debajo del último benchmark: aquí acababan las dos
+                        filas de la media, y sin nada el grupo quedaba pegado al
+                        siguiente. */}
+                    <div className="pb-1" />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Una línea por columna y en su mismo orden, en vez del párrafo
+                corrido de antes: cada frase queda al lado del número que explica,
+                y el nombre de la columna es el que se lee en la cabecera. */}
+            <dl className="flex flex-col gap-1.5 pt-1 text-[12.5px] leading-[1.5] text-muted-foreground">
+              {COLUMNAS.map(([nombre, texto]) => (
+                <div key={nombre} className="flex gap-2.5">
+                  <dt className="w-[58px] shrink-0 font-mono text-[11px] leading-[1.6] text-foreground/70">
+                    {nombre}
+                  </dt>
+                  <dd className="min-w-0 text-pretty">{texto}</dd>
                 </div>
               ))}
-            </div>
+            </dl>
+
+            {/* La tabla llega hasta la columna nivelada y ahí se para. Lo que
+                viene después cuelga de cada nota, que es donde se pregunta; aquí
+                solo se dice que está ahí y se enlaza el porqué del centro. */}
+            <p className="text-pretty text-[12.5px] leading-[1.5] text-muted-foreground">
+              {es.desglose.dondeEstaLaCuenta}{" "}
+              <Link
+                href="/metodologia#evidencia"
+                className="underline underline-offset-4 hover:text-foreground"
+              >
+                {es.desglose.losDosPasos}
+              </Link>
+              {conDesglose.some((v) => v.metricas.length < 2)
+                ? ` ${es.desglose.unSoloBenchmark}`
+                : ""}
+            </p>
+
+            <p className="text-pretty text-[12.5px] leading-[1.5] text-muted-foreground">
+              {es.desglose.escalas(escalas)}
+            </p>
           </div>
-
-          {/* Una línea por columna y en su mismo orden, en vez del párrafo
-              corrido de antes: cada frase queda al lado del número que explica,
-              y el nombre de la columna es el que se lee en la cabecera. */}
-          <dl className="flex flex-col gap-1.5 pt-1 text-[12.5px] leading-[1.5] text-muted-foreground">
-            {COLUMNAS.map(([nombre, texto]) => (
-              <div key={nombre} className="flex gap-2.5">
-                <dt className="w-[58px] shrink-0 font-mono text-[11px] leading-[1.6] text-foreground/70">
-                  {nombre}
-                </dt>
-                <dd className="min-w-0 text-pretty">{texto}</dd>
-              </div>
-            ))}
-          </dl>
-
-          {/* La tabla llega hasta la columna nivelada y ahí se para. Lo que
-              viene después cuelga de cada nota, que es donde se pregunta; aquí
-              solo se dice que está ahí y se enlaza el porqué del centro. */}
-          <p className="text-pretty text-[12.5px] leading-[1.5] text-muted-foreground">
-            {es.desglose.dondeEstaLaCuenta}{" "}
-            <Link
-              href="/metodologia#evidencia"
-              className="underline underline-offset-4 hover:text-foreground"
-            >
-              {es.desglose.losDosPasos}
-            </Link>
-            {conDesglose.some((v) => v.metricas.length < 2)
-              ? ` ${es.desglose.unSoloBenchmark}`
-              : ""}
-          </p>
-
-          <p className="text-pretty text-[12.5px] leading-[1.5] text-muted-foreground">
-            {es.desglose.escalas(escalas)}
-          </p>
-        </div>
+        </details>
       ) : null}
 
       {m.providers.length ? (

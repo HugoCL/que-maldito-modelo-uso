@@ -12,7 +12,9 @@ export async function Pie() {
 
   return (
     <footer className="mt-auto border-t">
-      <div className="mx-auto flex max-w-6xl flex-col gap-3 px-5 py-8 text-xs text-muted-foreground">
+      {/* El mismo ancho que la cabecera: con uno distinto el pie quedaba
+          descolgado a la izquierda de todo lo demás. */}
+      <div className="mx-auto flex w-full max-w-[940px] flex-col gap-3 px-5 py-8 text-xs text-muted-foreground sm:px-[30px]">
         <p>
           Datos de{" "}
           {activas.map((f, i) => (
