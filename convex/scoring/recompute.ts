@@ -4,6 +4,8 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { Candidate } from "./compute";
 import { scoreAll } from "./compute";
 import { elegirTarjetas } from "./tiers";
+import { sumarPreliminares } from "./preliminares";
+import type { ModeloDelCatalogo, Preliminar } from "./preliminares";
 
 /** Cuántos candidatos van en cada fila de la tabla `candidatos`. */
 const POR_TROZO = 150;
@@ -46,6 +48,9 @@ export async function candidatosParaConsulta(
  * observaciones no— y modelos del catálogo que nadie midió nunca. Barriendo
  * `models` y `variants` enteras se leían cientos de documentos para descartar
  * casi todos; desde las observaciones se lee exactamente lo que se usa.
+ *
+ * Encima van los preliminares que cargó alguien a mano y que ningún benchmark
+ * ha sobrescrito todavía. Ver scoring/preliminares.ts.
  *
  * El orden final es por `variantKey` y no el que traiga la base: los empates de
  * calidad se rompen por posición en el array, así que dejarlo al orden de
@@ -107,7 +112,45 @@ export async function candidatosDesdeLaBase(ctx: QueryCtx): Promise<Candidate[]>
     });
   }
 
-  return candidatos.sort((a, b) => a.variantKey.localeCompare(b.variantKey));
+  candidatos.sort((a, b) => a.variantKey.localeCompare(b.variantKey));
+  return sumarPreliminares(candidatos, ...(await preliminaresYCatalogo(ctx)));
+}
+
+/**
+ * Los preliminares cargados a mano y los modelos del catálogo de los que
+ * cuelgan. Se lee un modelo por `modelKey` distinto, no el catálogo entero:
+ * los preliminares son un puñado y el catálogo, cientos.
+ */
+async function preliminaresYCatalogo(
+  ctx: QueryCtx,
+): Promise<[Preliminar[], Map<string, ModeloDelCatalogo>]> {
+  const filas = await ctx.db.query("preliminares").collect();
+  const catalogo = new Map<string, ModeloDelCatalogo>();
+  for (const modelKey of new Set(filas.map((f) => f.modelKey))) {
+    const m = await ctx.db
+      .query("models")
+      .withIndex("by_modelKey", (q) => q.eq("modelKey", modelKey))
+      .unique();
+    if (!m) continue;
+    catalogo.set(modelKey, {
+      modelKey,
+      modelName: m.name,
+      creator: m.creator,
+      pricing: m.pricing,
+      providers: m.providers ?? [],
+      openWeights: m.openWeights,
+      programmingRank: m.programmingRank,
+    });
+  }
+  const preliminares = filas.map((f) => ({
+    modelKey: f.modelKey,
+    effort: f.effort,
+    metric: f.metric,
+    value: f.value,
+    fuenteUrl: f.fuenteUrl,
+    measuredAt: f.measuredAt,
+  }));
+  return [preliminares, catalogo];
 }
 
 /** Rehace el cache de candidatos: fuera el de ayer, dentro el de hoy. */

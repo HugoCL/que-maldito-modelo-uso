@@ -97,6 +97,29 @@ run: lo encarga, contesta `202` y el avance se ve en [/estado](app/estado/page.t
 Si ya hay uno en marcha contesta `409` y no encarga otro. Sin `REFRESCO_TOKEN`,
 o con uno de menos de 24 caracteres, la ruta existe pero no hace nada.
 
+### Valores preliminares
+
+Cuando sale un modelo, el laboratorio publica sus resultados el mismo día y los
+benchmarks tardan semanas en medirlo. Para no dejarlo fuera mientras tanto, hay
+una página sin enlazar, `/admin/preliminares`, donde se cargan a mano esos
+números con el enlace de donde salen. La guarda el mismo `REFRESCO_TOKEN`: se
+pega una vez y queda en una cookie.
+
+Tres reglas:
+
+- **El oficial sobrescribe al preliminar**, métrica por métrica y sin borrarlo:
+  el run en que el benchmark publica su resultado, el preliminar deja de contar.
+  Uno cargado sin effort lo sobrescribe cualquier effort que mida el benchmark.
+- **Puntúan pero no mueven la escala.** Los extremos, los desniveles y el centro
+  salen solo de lo medido, así que cargar una cifra optimista no le cambia la
+  nota a ningún otro modelo.
+- **Se ven.** Cualquier nota que se apoye en un preliminar sale marcada como
+  preliminar en la página principal, en el gráfico y en la ficha, donde el
+  benchmark enlaza al anuncio.
+
+Si el catálogo todavía no tiene el modelo, el preliminar se guarda igual y
+empieza a contar en cuanto models.dev lo publique.
+
 Ninguna página se prerenderiza ([`app/layout.tsx`](app/layout.tsx) fuerza el
 renderizado dinámico). Todo lo que se ve sale de una consulta a Convex que no se
 cachea, así que prerenderizar cualquier página la dejaría congelada con los

@@ -52,6 +52,8 @@ type Punto = {
   hi: number;
   tier: Tier | null;
   medido: boolean;
+  /** Alguno de sus benchmarks es un preliminar del laboratorio. */
+  preliminar: boolean;
   /** Si está en la frontera de Pareto. Lo demás es el fondo contra el que se lee. */
   frontera: boolean;
   /** De qué lado del punto cabe su etiqueta. Ver ladoLibre(). */
@@ -82,6 +84,7 @@ export function FronteraCalidadCosto({
       hi: v.qualityHi,
       tier: ganadores.get(v.variantKey) ?? null,
       medido: v.costMeasured,
+      preliminar: !!v.preliminar,
       frontera: !!v.enFrontera,
       arriba: true,
     }))
@@ -332,6 +335,7 @@ function Globo({ active, payload }: { active?: boolean; payload?: Array<{ payloa
       </div>
       <p className="text-muted-foreground">
         {p.medido ? es.tarjeta.costoMedido : es.tarjeta.costoEstimado} · {es.indice.enElGlobo}
+        {p.preliminar ? ` · ${es.tarjeta.preliminar}` : ""}
         {p.tier ? ` · ${config[p.tier].label}` : ""}
       </p>
     </div>

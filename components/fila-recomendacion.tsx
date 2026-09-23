@@ -100,6 +100,7 @@ export function FilaRecomendacion({ tarjeta, sin }: { tarjeta: Tarjeta; sin?: st
           ) : null}
           {repiteA ? <Repite tier={repiteA} /> : null}
           {ganador.confidence === "baja" ? <Baja /> : null}
+          {ganador.preliminar ? <Preliminar /> : null}
         </p>
         <p
           className={cn(
@@ -137,6 +138,7 @@ export function FilaRecomendacion({ tarjeta, sin }: { tarjeta: Tarjeta; sin?: st
                       {a.effort !== "default" ? ` ${a.effort}` : ""}
                     </Link>
                     {a.confidence === "baja" ? <Baja /> : null}
+                    {a.preliminar ? <Preliminar /> : null}
                   </span>
                   <span className="shrink-0">
                     {a.quality.toFixed(0)} · {a.cost !== undefined ? `$${a.cost.toFixed(2)}` : "—"}
@@ -199,6 +201,22 @@ function Baja() {
       className="ml-2 shrink-0 rounded border border-dashed px-1.5 py-px align-middle font-mono text-[10.5px] font-normal whitespace-nowrap text-muted-foreground"
     >
       {es.tarjeta.confianzaBaja}
+    </span>
+  );
+}
+
+/**
+ * La marca de una nota que se apoya en algún resultado del laboratorio que el
+ * benchmark todavía no ha medido. Punteada como las otras dos, porque tampoco
+ * dice que el modelo sea peor: dice de dónde sale el número.
+ */
+export function Preliminar() {
+  return (
+    <span
+      title={es.tarjeta.preliminarNota}
+      className="ml-2 shrink-0 rounded border border-dashed px-1.5 py-px align-middle font-mono text-[10.5px] font-normal whitespace-nowrap text-muted-foreground"
+    >
+      {es.tarjeta.preliminar}
     </span>
   );
 }

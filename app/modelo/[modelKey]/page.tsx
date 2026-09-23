@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { fuentesApagadas } from "@/components/barra-de-filtros";
 import { CuentaDeLaNota } from "@/components/cuenta-de-la-nota";
+import { Preliminar } from "@/components/fila-recomendacion";
 import { obtenerEscala, obtenerModelo, obtenerRecomendaciones } from "@/lib/datos";
 import { es } from "@/lib/i18n/es";
 import { cn } from "@/lib/utils";
@@ -131,6 +132,7 @@ export default async function FichaModelo({
               >
                 <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
                   {v.effort === "default" ? es.tarjeta.sinEffort : v.effort}
+                  {v.preliminar ? <Preliminar /> : null}
                   {/* La barra sola no decía nada: ahora dice qué respuesta es. */}
                   {ganadores.has(v.variantKey) ? (
                     <span className="text-[11px] text-muted-foreground">
@@ -226,7 +228,29 @@ export default async function FichaModelo({
                         key={met.metric}
                         className={cn(CUADRICULA, "px-3.5 py-[7px] text-muted-foreground")}
                       >
-                        <span className="min-w-0 truncate">{met.etiqueta}</span>
+                        <span className="min-w-0 truncate">
+                          {met.etiqueta}
+                          {/* El preliminar se dice en su fila, con el enlace a
+                              donde lo publicó el laboratorio: es el único número
+                              de la tabla que no viene del benchmark. */}
+                          {met.preliminar ? (
+                            met.fuenteUrl ? (
+                              <a
+                                href={met.fuenteUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                title={es.tarjeta.preliminarNota}
+                                className="ml-1.5 text-[11px] underline underline-offset-2 hover:text-foreground"
+                              >
+                                {es.tarjeta.preliminar}
+                              </a>
+                            ) : (
+                              <span title={es.tarjeta.preliminarNota} className="ml-1.5 text-[11px]">
+                                {es.tarjeta.preliminar}
+                              </span>
+                            )
+                          ) : null}
+                        </span>
                         <span className="text-right tabular-nums">{met.valor.toFixed(1)}%</span>
                         {/* Con un decimal y no redondeado a entero: la gracia de
                             esto es poder rehacer la media a mano, y 100 + 99 da

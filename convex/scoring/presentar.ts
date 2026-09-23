@@ -30,6 +30,7 @@ export function aTarjeta(s: Scored) {
     qualityHi: Math.round(s.qualityHi * 10) / 10,
     coverage: Math.round(s.coverage * 100) / 100,
     benchmarks: s.benchmarks,
+    preliminar: s.preliminar,
     confidence: s.confidence,
     cost: s.cost !== undefined ? Math.round(s.cost * 100) / 100 : undefined,
     costMeasured: s.costMeasured,
@@ -51,6 +52,7 @@ export function aTarjeta(s: Scored) {
       desnivel: Math.round(m.desnivel * 1000) / 10,
       minimo: Math.round(m.min * 1000) / 10,
       maximo: Math.round(m.max * 1000) / 10,
+      ...(m.preliminar ? { preliminar: true, fuenteUrl: m.fuenteUrl } : {}),
     })),
   };
 }
