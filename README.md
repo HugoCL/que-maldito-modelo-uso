@@ -1,6 +1,18 @@
 # Qué m*ldito modelo uso
 
-Tres respuestas a "¿qué modelo uso para programar?", actualizadas solas cada día:
+[![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-blue.svg)](LICENSE)
+[![Demo](https://img.shields.io/badge/demo-qmmu.hugocastro.dev-black)](https://qmmu.hugocastro.dev)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)](https://nextjs.org)
+[![Convex](https://img.shields.io/badge/backend-Convex-orange)](https://convex.dev)
+
+Sitio que cruza benchmarks públicos de modelos para programar y responde, cada día, "¿qué modelo
+uso?". Pensado para quien programa con asistentes y no quiere comparar tablas a mano.
+
+[![Página principal con las tres respuestas del día](docs/screenshots/inicio.png)](https://qmmu.hugocastro.dev)
+
+Demo: **[qmmu.hugocastro.dev](https://qmmu.hugocastro.dev)** (también en [qmmu.vercel.app](https://qmmu.vercel.app)).
+
+Tres respuestas, actualizadas solas cada día:
 
 | | |
 |---|---|
@@ -17,7 +29,30 @@ El ejemplo concreto no está escrito aquí a propósito: [/metodologia](app/meto
 calcula del conjunto de hoy y enseña el peor salto que haya ahora mismo. Un número pegado en un
 README es verdad el día que se escribe.
 
-## Puesta en marcha
+## Qué hace
+
+- **Recomienda un modelo a un nivel de effort**, no un modelo a secas, con calidad en escala 0–100 y un índice de costo por tarea.
+- **Cruza tres benchmarks** (DeepSWE, CursorBench, Terminal-Bench) con el catálogo de models.dev y el uso real de OpenRouter, y enlaza siempre al original.
+- **Filtros en la URL**: por familia (Solo GPT, Claude, Gemini, Grok, Open Weight), tope de gasto por tarea, modelos ocultos y mínimo de benchmarks para ser respuesta. Se pueden compartir como link.
+- **Ficha por modelo** (`/modelo/[modelKey]`) con sus mediciones y de dónde salen.
+- **[/metodologia](app/metodologia/page.tsx)**: la metodología completa, con los números de hoy.
+- **[/estado](app/estado/page.tsx)**: estado del pipeline por fuente y nombres que no se pudieron emparejar.
+- **[/creditos](app/creditos/page.tsx)**: atribución y licencia de cada fuente.
+- **Valores preliminares** de modelos recién salidos, cargados a mano y siempre marcados (ver más abajo).
+
+| Metodología | Estado del pipeline |
+|---|---|
+| ![Página de metodología](docs/screenshots/metodologia.png) | ![Página de estado del pipeline](docs/screenshots/estado.png) |
+
+## Stack
+
+Next.js 16 (App Router, React 19), Convex como backend y base de datos, Tailwind y shadcn/ui
+para la interfaz, Recharts para los gráficos, Vitest para los tests. Web en Vercel, backend en
+Convex. La estructura de carpetas está en [Cómo está montado](#cómo-está-montado).
+
+## Correr localmente
+
+Requisitos: Node 20.9 o superior y [pnpm](https://pnpm.io). Para el backend, una cuenta de [Convex](https://convex.dev) (gratis).
 
 ```bash
 pnpm install
@@ -45,6 +80,17 @@ npx convex run ingest/orchestrator:runAll '{"trigger":"manual"}'
 ```
 
 Después el cron de `convex/crons.ts` lo repite cada día a las 06:00 UTC.
+
+### Variables de entorno
+
+Ejemplo en [`.env.example`](.env.example).
+
+| Variable | Dónde va | Para qué | Requerida |
+|---|---|---|---|
+| `NEXT_PUBLIC_CONVEX_URL` | `.env.local` | URL del despliegue de Convex. La escribe `npx convex dev`. Sin ella la web usa `lib/datos-semilla.ts` | No |
+| `REFRESCO_TOKEN` | entorno de Convex | Activa `/api/refrescar` y `/admin/preliminares`. Mínimo 24 caracteres | No |
+| `ARTIFICIAL_ANALYSIS_API_KEY` | entorno de Convex | Solo para la fuente Artificial Analysis, apagada por defecto (ver Fuentes) | No |
+| `CONVEX_DEPLOY_KEY` | entorno de Vercel | *Production deploy key* de Convex para el build de producción | Solo en deploy |
 
 ## Despliegue
 
@@ -278,7 +324,7 @@ donde hay que discutir.
 pnpm test
 ```
 
-80 tests contra fixtures reales capturados de cada fuente (`tests/fixtures/`). Cubren los
+Más de 100 tests contra fixtures reales capturados de cada fuente (`tests/fixtures/`). Cubren los
 parsers, la resolución de nombres y las propiedades del scoring: que nunca se recomiende una
 variante dominada, que las tres respuestas salgan siempre en orden de precio, que dos modelos con
 intervalos solapados se desempaten por costo, y que bajar el mínimo de benchmarks solo añada
@@ -322,3 +368,14 @@ Regenera `lib/datos-semilla.ts` desde los fixtures.
 de este equipo exige provenance attestation y un mínimo de tres días desde la publicación. En vez
 de desactivar esos chequeos, las dependencias transitivas afectadas se suben a una versión que sí
 está firmada. El motivo está comentado en el archivo.
+
+
+## Licencia
+
+Código bajo licencia MIT. Úsalo como quieras, manteniendo el aviso de copyright. Ver [LICENSE](LICENSE).
+
+Los datos de benchmarks y los fixtures de `tests/fixtures` pertenecen a sus fuentes originales (models.dev, OpenRouter, DeepSWE, CursorBench, Terminal-Bench, etc.) y no quedan cubiertos por la licencia MIT. Cada fuente y sus términos están en [/creditos](app/creditos/page.tsx).
+
+## Autor
+
+Hugo Castro. [github.com/HugoCL](https://github.com/HugoCL) · [hugocastro.dev](https://hugocastro.dev)
