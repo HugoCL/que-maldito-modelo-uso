@@ -14,15 +14,7 @@ export function Cabecera() {
         <Link href="/" className="font-mono text-xs font-medium">
           {es.marca.nombreCorto}
         </Link>
-        <div className="flex items-center gap-4 text-[13px] text-muted-foreground">
-          <Link href="/metodologia" className="hover:text-foreground">
-            {es.nav.metodologia}
-          </Link>
-          <Link href="/estado" className="hover:text-foreground">
-            {es.nav.estado}
-          </Link>
-          <InterruptorTema />
-        </div>
+        <InterruptorTema />
       </nav>
     </header>
   );

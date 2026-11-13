@@ -3,7 +3,6 @@ import { Geist_Mono, Instrument_Sans } from "next/font/google";
 import { Cabecera } from "@/components/cabecera";
 import { Pie } from "@/components/pie";
 import { CLAVE_TEMA, CONSULTA_OSCURO } from "@/lib/tema";
-import { SOURCES } from "@/convex/sources/registry";
 import { es } from "@/lib/i18n/es";
 import { cn } from "@/lib/utils";
 import "./globals.css";
@@ -17,11 +16,9 @@ const instrumentSans = Instrument_Sans({ subsets: ["latin"], variable: "--font-s
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" });
 
 /**
- * Nada se prerenderiza. Todo lo que se ve en este sitio sale de una consulta a
- * Convex, y esas consultas no se cachean: prerenderizar cualquier página la
- * congelaría con los datos del build. Sin esto, `/creditos`, `/estado` y
- * `/metodologia` se quedaban con la instantánea de la semilla hasta el
- * siguiente despliegue, que es exactamente lo que este sitio promete no hacer.
+ * Nada se prerenderiza. La portada archivada no consulta nada, pero las páginas
+ * de antes siguen en el código, redirigidas, y leen de Convex: sin esto el
+ * build intentaría prerenderizarlas contra la base.
  */
 export const dynamic = "force-dynamic";
 
@@ -30,15 +27,9 @@ export const metadata: Metadata = {
     default: es.marca.nombre,
     template: `%s · ${es.marca.nombre}`,
   },
-  // La lista de benchmarks sale del registro: una fuente que se añade o se
-  // quita no puede dejar la descripción del sitio mintiendo en los buscadores.
   description:
-    "Qué modelo usar para programar, en tres respuestas: uno barato para mantenimiento, " +
-    "uno para el día a día y uno para cuando la tarea es difícil. Cruza " +
-    SOURCES.filter((s) => s.enabled && s.kind === "benchmark")
-      .map((s) => s.name)
-      .join(", ") +
-    " con el costo real por tarea.",
+    "Proyecto archivado. Fuentes para elegir modelo de código: " +
+    "FrontierCode, CursorBench, Terminal-Bench, ProgramBench, Artificial Analysis, OpenRouter y models.dev.",
 };
 
 /**
