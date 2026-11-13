@@ -5,7 +5,16 @@
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)](https://nextjs.org)
 [![Convex](https://img.shields.io/badge/backend-Convex-orange)](https://convex.dev)
 
-Sitio que cruza benchmarks públicos de modelos para programar y responde, cada día, "¿qué modelo
+> [!IMPORTANT]
+> **Archivado el 13 de noviembre de 2026.** El sitio ya no recomienda modelos: ahora solo enlaza
+> las fuentes que usaba. DeepSWE, la base del cálculo, dejó de publicar resultados (su último
+> modelo es del 3 de septiembre de 2026). Varios de los benchmarks que hoy citan los laboratorios,
+> como FrontierCode, restringen cómo se republican sus cifras o no lo dejan claro. Sin una base que
+> se pueda republicar, la escala común no se sostiene. El cron de ingesta está vacío desde este
+> cambio y las demás rutas redirigen a la portada. Todo lo de abajo describe el proyecto tal como
+> funcionaba.
+
+Sitio que cruzaba benchmarks públicos de modelos para programar y respondía, cada día, "¿qué modelo
 uso?". Pensado para quien programa con asistentes y no quiere comparar tablas a mano.
 
 [![Página principal con las tres respuestas del día](docs/screenshots/inicio.png)](https://qmmu.hugocastro.dev)
